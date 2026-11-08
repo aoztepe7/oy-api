@@ -1,0 +1,18 @@
+# Build output
+bin/
+obj/
+TestResults/
+
+# IDE
+.vs/
+.vscode/
+.idea/
+*.user
+*.suo
+
+# Runtime data: uploaded media and Data Protection keys (secrets) — never commit
+**/storage/
+
+# Local settings / secrets
+.env
+appsettings.*.local.json

@@ -1,0 +1,7 @@
+**/bin
+**/obj
+**/storage
+tests
+.vs
+.vscode
+*.user
