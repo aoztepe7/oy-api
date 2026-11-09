@@ -15,6 +15,8 @@ public class Enrollment : Entity
     public DateOnly? EndDate { get; set; }
     public EnrollmentStatus Status { get; set; }
     public string Note { get; set; } = "";
+    /// <summary>Answers to the program's custom pre-registration questions.</summary>
+    public List<EnrollmentAnswer> Answers { get; set; } = [];
 
     public List<Payment> Payments { get; set; } = [];
 

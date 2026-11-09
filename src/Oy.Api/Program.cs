@@ -149,7 +149,8 @@ static async Task MigrateAndSeedAsync(WebApplication app)
     await db.Database.MigrateAsync();
     await DbSeeder.SeedAsync(db,
         scope.ServiceProvider.GetRequiredService<IPasswordHasher<User>>(),
-        scope.ServiceProvider.GetRequiredService<IOptions<SeedOptions>>().Value);
+        scope.ServiceProvider.GetRequiredService<IOptions<SeedOptions>>().Value,
+        scope.ServiceProvider.GetRequiredService<MediaService>().FullPath);
 }
 
 public partial class Program;

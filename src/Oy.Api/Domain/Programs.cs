@@ -15,8 +15,14 @@ public class TrainingProgram : Entity
     public TimeOnly StartTime { get; set; }
     public TimeOnly EndTime { get; set; }
     public int Capacity { get; set; }
+    /// <summary>Base price; with <see cref="PriceOptions"/> it is the lowest package price ("… den başlayan").</summary>
     public decimal Price { get; set; }
     public PricePeriod PricePeriod { get; set; }
+    /// <summary>Optional price table, e.g. "1 Yetişkin + 1 Çocuk: 20.000", add-ons "İlave çocuk: +3.000".</summary>
+    public List<PriceOption> PriceOptions { get; set; } = [];
+    /// <summary>Whether the site shows the pre-registration form (otherwise a contact box).</summary>
+    public bool EnrollmentEnabled { get; set; } = true;
+    public EnrollmentFormConfig EnrollmentForm { get; set; } = new();
     public string Summary { get; set; } = "";
     public string Description { get; set; } = "";
     public string CoverImageUrl { get; set; } = "";
@@ -41,6 +47,9 @@ public class TrainingProgram : Entity
         }
     }
 }
+
+/// <summary>One row of a program's price table. Add-ons are extras on top of a package ("+3.000").</summary>
+public record PriceOption(string Label, decimal Price, string Note = "", bool IsAddon = false);
 
 /// <summary>A single lesson day of a program.</summary>
 public class Session : Entity

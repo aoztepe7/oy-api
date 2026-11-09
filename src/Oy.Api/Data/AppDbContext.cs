@@ -55,6 +55,8 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             e.ToTable("Programs");
             e.HasIndex(x => x.Slug).IsUnique();
             e.HasIndex(x => new { x.IsPublished, x.EndDate });
+            Json(e.Property(x => x.PriceOptions));
+            Json(e.Property(x => x.EnrollmentForm));
         });
         b.Entity<Session>(e =>
         {
@@ -65,7 +67,11 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
         });
         b.Entity<Expense>().HasIndex(x => new { x.ProgramId, x.Date });
         b.Entity<StaffAssignment>().HasOne(x => x.Staff).WithMany(x => x.Assignments).OnDelete(DeleteBehavior.Restrict);
-        b.Entity<Enrollment>().HasIndex(x => new { x.ProgramId, x.Status });
+        b.Entity<Enrollment>(e =>
+        {
+            e.HasIndex(x => new { x.ProgramId, x.Status });
+            Json(e.Property(x => x.Answers));
+        });
         b.Entity<Payment>().HasOne(x => x.Invoice).WithOne(x => x.Payment).HasForeignKey<Invoice>(x => x.PaymentId);
         b.Entity<Invoice>().HasIndex(x => x.Status);
 

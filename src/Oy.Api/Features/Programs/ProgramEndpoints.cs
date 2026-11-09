@@ -24,14 +24,27 @@ public record ProgramInput(
     string? Description,
     string? CoverImageUrl,
     [MaxLength(300)] string? Location,
-    bool IsPublished);
+    bool IsPublished,
+    List<PriceOptionInput>? PriceOptions = null,
+    /// <summary>null = leave unchanged (older clients).</summary>
+    bool? EnrollmentEnabled = null,
+    EnrollmentFormConfig? EnrollmentForm = null);
+
+public record PriceOptionInput(
+    [MaxLength(100)] string? Label,
+    [Range(0, 10_000_000)] decimal Price,
+    [MaxLength(150)] string? Note,
+    bool IsAddon);
 
 public record ProgramAdminDto(
     Guid Id, string Title, string Slug, ProgramType Type, int AgeMin, int AgeMax,
     DateOnly StartDate, DateOnly EndDate, int[] DaysOfWeek, TimeOnly StartTime, TimeOnly EndTime,
-    int Capacity, decimal Price, PricePeriod PricePeriod, string Summary, string Description,
+    int Capacity, decimal Price, PricePeriod PricePeriod, List<PriceOption> PriceOptions, string Summary, string Description,
     string CoverImageUrl, string Location, bool IsPublished, int? FeaturedOrder,
-    int EnrolledCount, int SessionCount, DateTime CreatedAt, DateTime UpdatedAt);
+    bool EnrollmentEnabled, EnrollmentFormConfig EnrollmentForm,
+    int EnrolledCount, int SessionCount, DateTime CreatedAt, DateTime UpdatedAt,
+    /// <summary>All enrollments of the program, any status (the "Kayıtlar" tab count).</summary>
+    int EnrollmentTotal);
 
 /// <summary>Home page slider order: first id is shown first; programs not listed are un-featured.</summary>
 public record FeaturedInput(Guid[] ProgramIds);
@@ -242,6 +255,17 @@ public static class ProgramEndpoints
             .Check(input.EndTime > input.StartTime, "endTime", "Bitiş saati başlangıçtan sonra olmalı.")
             .Check(days.Length > 0 && days.All(d => d is >= 1 and <= 7), "daysOfWeek", "En az bir geçerli gün seçin.")
             .Check(slug.Length > 0, "slug", "Geçerli bir adres (slug) girin.");
+        // Empty rows from the editor are ignored; a row with a price needs a label.
+        var options = (input.PriceOptions ?? [])
+            .Where(o => !string.IsNullOrWhiteSpace(o.Label) || o.Price > 0)
+            .Select(o => new PriceOption(o.Label?.Trim() ?? "", o.Price, o.Note?.Trim() ?? "", o.IsAddon))
+            .ToList();
+        errors
+            .Check(options.Count <= 20, "priceOptions", "En fazla 20 fiyat seçeneği girilebilir.")
+            .Check(options.All(o => o.Label.Length > 0), "priceOptions", "Her fiyat seçeneğinin bir adı olmalı (örn. 1 Yetişkin + 1 Çocuk).")
+            .Check(options.Count == 0 || options.Any(o => !o.IsAddon), "priceOptions", "Ek ücretlerin yanında en az bir paket fiyatı girin.");
+        var (form, formErrors) = EnrollmentForms.Sanitize(input.EnrollmentForm ?? p.EnrollmentForm);
+        foreach (var (field, message) in formErrors) errors.Check(false, field, message);
         if (errors.Any) return errors.ToResult();
         if (await db.Programs.AnyAsync(x => x.Slug == slug && x.Id != p.Id))
             return new Errors().Check(false, "slug", "Bu adres başka bir eğitimde kullanılıyor.").ToResult();
@@ -257,13 +281,17 @@ public static class ProgramEndpoints
         p.StartTime = input.StartTime;
         p.EndTime = input.EndTime;
         p.Capacity = input.Capacity;
-        p.Price = input.Price;
+        p.PriceOptions = options;
+        // With a price table the base price is the cheapest package ("… den başlayan").
+        p.Price = options.Any(o => !o.IsAddon) ? options.Where(o => !o.IsAddon).Min(o => o.Price) : input.Price;
         p.PricePeriod = monthly ? PricePeriod.Monthly : input.PricePeriod;
         p.Summary = input.Summary?.Trim() ?? "";
         p.Description = input.Description?.Trim() ?? "";
         p.CoverImageUrl = media.ToStored(input.CoverImageUrl);
         p.Location = input.Location?.Trim() ?? "";
         p.IsPublished = input.IsPublished;
+        p.EnrollmentEnabled = input.EnrollmentEnabled ?? p.EnrollmentEnabled;
+        p.EnrollmentForm = form;
 
         if (isNew) db.Programs.Add(p);
         SyncSessions(p, db);
@@ -306,8 +334,8 @@ public static class ProgramEndpoints
     private static IQueryable<ProgramAdminDto> Project(IQueryable<TrainingProgram> query) =>
         query.Select(p => new ProgramAdminDto(
             p.Id, p.Title, p.Slug, p.Type, p.AgeMin, p.AgeMax, p.StartDate, p.EndDate, p.DaysOfWeek,
-            p.StartTime, p.EndTime, p.Capacity, p.Price, p.PricePeriod, p.Summary, p.Description,
-            p.CoverImageUrl, p.Location, p.IsPublished, p.FeaturedOrder,
+            p.StartTime, p.EndTime, p.Capacity, p.Price, p.PricePeriod, p.PriceOptions, p.Summary, p.Description,
+            p.CoverImageUrl, p.Location, p.IsPublished, p.FeaturedOrder, p.EnrollmentEnabled, p.EnrollmentForm,
             p.Enrollments.Count(e => e.Status == EnrollmentStatus.Active),
-            p.Sessions.Count, p.CreatedAt, p.UpdatedAt));
+            p.Sessions.Count, p.CreatedAt, p.UpdatedAt, p.Enrollments.Count));
 }

@@ -23,7 +23,7 @@ public record EnrollmentInput(
 public record EnrollmentDto(
     Guid Id, Guid ProgramId, string ProgramTitle, string ChildName, DateOnly? ChildBirthDate, string ParentName,
     string ParentPhone, string ParentEmail, decimal Fee, PricePeriod FeePeriod, DateOnly StartDate, DateOnly? EndDate,
-    EnrollmentStatus Status, string Note, decimal PaidTotal, DateTime CreatedAt);
+    EnrollmentStatus Status, string Note, decimal PaidTotal, DateTime CreatedAt, List<EnrollmentAnswer> Answers);
 
 public static class EnrollmentEndpoints
 {
@@ -39,7 +39,12 @@ public static class EnrollmentEndpoints
             return await Project(query.OrderByDescending(e => e.CreatedAt)).ToListAsync();
         }).RequireAuthorization(Permissions.EnrollmentsRead);
 
-        group.MapPost("/", async (EnrollmentInput input, AppDbContext db, UiRevalidator ui) =>
+        // Sidebar badge: website pre-registrations waiting for approval.
+        group.MapGet("/pending-count", async (AppDbContext db) =>
+            new { count = await db.Enrollments.CountAsync(e => e.Status == EnrollmentStatus.Pending) })
+            .RequireAuthorization(Permissions.EnrollmentsRead);
+
+        group.MapPost("/",async (EnrollmentInput input, AppDbContext db, UiRevalidator ui) =>
         {
             var e = new Enrollment { ChildName = "", ParentName = "" };
             return await SaveAsync(e, input, db, ui, isNew: true);
@@ -95,5 +100,5 @@ public static class EnrollmentEndpoints
 
     private static IQueryable<EnrollmentDto> Project(IQueryable<Enrollment> q) => q.Select(e => new EnrollmentDto(
         e.Id, e.ProgramId, e.Program.Title, e.ChildName, e.ChildBirthDate, e.ParentName, e.ParentPhone, e.ParentEmail,
-        e.Fee, e.FeePeriod, e.StartDate, e.EndDate, e.Status, e.Note, e.Payments.Sum(p => p.Amount), e.CreatedAt));
+        e.Fee, e.FeePeriod, e.StartDate, e.EndDate, e.Status, e.Note, e.Payments.Sum(p => p.Amount), e.CreatedAt, e.Answers));
 }

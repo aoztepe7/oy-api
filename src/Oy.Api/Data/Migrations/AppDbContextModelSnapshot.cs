@@ -65,6 +65,10 @@ namespace Oy.Api.Data.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
+                    b.Property<string>("Answers")
+                        .IsRequired()
+                        .HasColumnType("jsonb");
+
                     b.Property<DateOnly?>("ChildBirthDate")
                         .HasColumnType("date");
 
@@ -725,6 +729,13 @@ namespace Oy.Api.Data.Migrations
                     b.Property<TimeOnly>("EndTime")
                         .HasColumnType("time without time zone");
 
+                    b.Property<bool>("EnrollmentEnabled")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("EnrollmentForm")
+                        .IsRequired()
+                        .HasColumnType("jsonb");
+
                     b.Property<int?>("FeaturedOrder")
                         .HasColumnType("integer");
 
@@ -738,6 +749,10 @@ namespace Oy.Api.Data.Migrations
                     b.Property<decimal>("Price")
                         .HasPrecision(14, 2)
                         .HasColumnType("numeric(14,2)");
+
+                    b.Property<string>("PriceOptions")
+                        .IsRequired()
+                        .HasColumnType("jsonb");
 
                     b.Property<string>("PricePeriod")
                         .IsRequired()
