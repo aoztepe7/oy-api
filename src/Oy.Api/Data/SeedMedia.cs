@@ -25,17 +25,17 @@ public static class SeedMedia
     public static IEnumerable<string> Gallery() =>
         Enumerable.Range(1, GalleryCount).Select(i => Url($"galeri-{i:00}.webp"));
 
-    /// <summary>Copies missing seed images into media storage (never overwrites).</summary>
-    public static void CopyTo(string mediaRoot)
+    /// <summary>Copies missing seed images into media storage — disk or Spaces (never overwrites).</summary>
+    public static async Task CopyToAsync(IFileStorage storage)
     {
         var source = Path.Combine(AppContext.BaseDirectory, "SeedMedia");
         if (!Directory.Exists(source)) return;
-        var target = Path.Combine(mediaRoot, Folder);
-        Directory.CreateDirectory(target);
         foreach (var file in Directory.EnumerateFiles(source))
         {
-            var dest = Path.Combine(target, Path.GetFileName(file));
-            if (!File.Exists(dest)) File.Copy(file, dest);
+            var key = $"{StorageKeys.Media}{Folder}/{Path.GetFileName(file)}";
+            if (await storage.ExistsAsync(key)) continue;
+            await using var stream = File.OpenRead(file);
+            await storage.SaveAsync(key, stream, StorageKeys.ContentTypeOf(file), isPublic: true);
         }
     }
 }

@@ -23,6 +23,116 @@ namespace Oy.Api.Data.Migrations
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
 
+            modelBuilder.Entity("Oy.Api.Domain.Attendance", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime?>("ArrivedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("EnrollmentId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("MarkedByName")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<Guid?>("MarkedByUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("SessionId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("EnrollmentId");
+
+                    b.HasIndex("SessionId", "EnrollmentId")
+                        .IsUnique();
+
+                    b.ToTable("Attendance");
+                });
+
+            modelBuilder.Entity("Oy.Api.Domain.ClassPhoto", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Caption")
+                        .IsRequired()
+                        .HasMaxLength(300)
+                        .HasColumnType("character varying(300)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("FileId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("ProgramId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime?>("PublishedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("SessionId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateOnly?>("TakenOn")
+                        .HasColumnType("date");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("UploadedByName")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<Guid?>("UploadedByUserId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("FileId");
+
+                    b.HasIndex("ProgramId");
+
+                    b.HasIndex("PublishedAt");
+
+                    b.HasIndex("SessionId");
+
+                    b.ToTable("ClassPhotos");
+                });
+
+            modelBuilder.Entity("Oy.Api.Domain.ClassPhotoTag", b =>
+                {
+                    b.Property<Guid>("PhotoId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("EnrollmentId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("PhotoId", "EnrollmentId");
+
+                    b.HasIndex("EnrollmentId");
+
+                    b.ToTable("ClassPhotoTags");
+                });
+
             modelBuilder.Entity("Oy.Api.Domain.ContactMessage", b =>
                 {
                     b.Property<Guid>("Id")
@@ -165,6 +275,81 @@ namespace Oy.Api.Data.Migrations
                     b.ToTable("Expenses");
                 });
 
+            modelBuilder.Entity("Oy.Api.Domain.FeedPost", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("AuthorName")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<Guid?>("AuthorUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("ImageIds")
+                        .IsRequired()
+                        .HasColumnType("jsonb");
+
+                    b.Property<Guid?>("ProgramId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime?>("PublishedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Text")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ProgramId");
+
+                    b.HasIndex("PublishedAt");
+
+                    b.ToTable("FeedPosts");
+                });
+
+            modelBuilder.Entity("Oy.Api.Domain.GuardianLink", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("EnrollmentId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Relation")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("EnrollmentId");
+
+                    b.HasIndex("UserId", "EnrollmentId")
+                        .IsUnique();
+
+                    b.ToTable("GuardianLinks");
+                });
+
             modelBuilder.Entity("Oy.Api.Domain.IntegrationConfig", b =>
                 {
                     b.Property<Guid>("Id")
@@ -260,6 +445,108 @@ namespace Oy.Api.Data.Migrations
                     b.ToTable("Invoices");
                 });
 
+            modelBuilder.Entity("Oy.Api.Domain.MediaAsset", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("ContentType")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Folder")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<int>("Height")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("OriginalName")
+                        .IsRequired()
+                        .HasMaxLength(255)
+                        .HasColumnType("character varying(255)");
+
+                    b.Property<long>("Size")
+                        .HasColumnType("bigint");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("UploadedByUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Url")
+                        .IsRequired()
+                        .HasMaxLength(300)
+                        .HasColumnType("character varying(300)");
+
+                    b.Property<int>("Width")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Url")
+                        .IsUnique();
+
+                    b.HasIndex("Folder", "CreatedAt");
+
+                    b.ToTable("MediaAssets");
+                });
+
+            modelBuilder.Entity("Oy.Api.Domain.ObservationNote", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("AuthorName")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<Guid?>("AuthorUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("EnrollmentId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("ProgramId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("SessionId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Tags")
+                        .IsRequired()
+                        .HasColumnType("jsonb");
+
+                    b.Property<string>("Text")
+                        .IsRequired()
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("EnrollmentId");
+
+                    b.HasIndex("SessionId");
+
+                    b.HasIndex("ProgramId", "EnrollmentId");
+
+                    b.ToTable("ObservationNotes");
+                });
+
             modelBuilder.Entity("Oy.Api.Domain.Page", b =>
                 {
                     b.Property<Guid>("Id")
@@ -350,6 +637,57 @@ namespace Oy.Api.Data.Migrations
                     b.ToTable("Payments");
                 });
 
+            modelBuilder.Entity("Oy.Api.Domain.PrivateFile", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("ContentType")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Folder")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<int>("Height")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("OriginalName")
+                        .IsRequired()
+                        .HasMaxLength(255)
+                        .HasColumnType("character varying(255)");
+
+                    b.Property<long>("Size")
+                        .HasColumnType("bigint");
+
+                    b.Property<string>("StoredName")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("UploadedByUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("Width")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Folder", "CreatedAt");
+
+                    b.ToTable("PrivateFiles");
+                });
+
             modelBuilder.Entity("Oy.Api.Domain.Role", b =>
                 {
                     b.Property<Guid>("Id")
@@ -393,6 +731,9 @@ namespace Oy.Api.Data.Migrations
                     b.Property<TimeOnly>("EndTime")
                         .HasColumnType("time without time zone");
 
+                    b.Property<DateTime?>("EndedAt")
+                        .HasColumnType("timestamp with time zone");
+
                     b.Property<bool>("IsCancelled")
                         .HasColumnType("boolean");
 
@@ -411,6 +752,13 @@ namespace Oy.Api.Data.Migrations
 
                     b.Property<TimeOnly>("StartTime")
                         .HasColumnType("time without time zone");
+
+                    b.Property<DateTime?>("StartedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("StartedByName")
+                        .IsRequired()
+                        .HasColumnType("text");
 
                     b.Property<Guid?>("ThemeId")
                         .HasColumnType("uuid");
@@ -816,11 +1164,23 @@ namespace Oy.Api.Data.Migrations
                     b.Property<bool>("IsActive")
                         .HasColumnType("boolean");
 
+                    b.Property<string>("Kind")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
                     b.Property<string>("PasswordHash")
                         .IsRequired()
                         .HasColumnType("text");
 
-                    b.Property<Guid>("RoleId")
+                    b.Property<string>("Phone")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<Guid?>("RoleId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid?>("StaffId")
                         .HasColumnType("uuid");
 
                     b.Property<DateTime>("UpdatedAt")
@@ -833,7 +1193,74 @@ namespace Oy.Api.Data.Migrations
 
                     b.HasIndex("RoleId");
 
+                    b.HasIndex("StaffId")
+                        .IsUnique();
+
                     b.ToTable("Users");
+                });
+
+            modelBuilder.Entity("Oy.Api.Domain.Attendance", b =>
+                {
+                    b.HasOne("Oy.Api.Domain.Enrollment", "Enrollment")
+                        .WithMany()
+                        .HasForeignKey("EnrollmentId")
+                        .OnDelete(DeleteBehavior.NoAction)
+                        .IsRequired();
+
+                    b.HasOne("Oy.Api.Domain.Session", "Session")
+                        .WithMany("Attendance")
+                        .HasForeignKey("SessionId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Enrollment");
+
+                    b.Navigation("Session");
+                });
+
+            modelBuilder.Entity("Oy.Api.Domain.ClassPhoto", b =>
+                {
+                    b.HasOne("Oy.Api.Domain.PrivateFile", "File")
+                        .WithMany()
+                        .HasForeignKey("FileId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Oy.Api.Domain.TrainingProgram", "Program")
+                        .WithMany()
+                        .HasForeignKey("ProgramId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("Oy.Api.Domain.Session", "Session")
+                        .WithMany()
+                        .HasForeignKey("SessionId")
+                        .OnDelete(DeleteBehavior.Cascade);
+
+                    b.Navigation("File");
+
+                    b.Navigation("Program");
+
+                    b.Navigation("Session");
+                });
+
+            modelBuilder.Entity("Oy.Api.Domain.ClassPhotoTag", b =>
+                {
+                    b.HasOne("Oy.Api.Domain.Enrollment", "Enrollment")
+                        .WithMany()
+                        .HasForeignKey("EnrollmentId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("Oy.Api.Domain.ClassPhoto", "Photo")
+                        .WithMany("Tags")
+                        .HasForeignKey("PhotoId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Enrollment");
+
+                    b.Navigation("Photo");
                 });
 
             modelBuilder.Entity("Oy.Api.Domain.Enrollment", b =>
@@ -858,6 +1285,35 @@ namespace Oy.Api.Data.Migrations
                     b.Navigation("Program");
                 });
 
+            modelBuilder.Entity("Oy.Api.Domain.FeedPost", b =>
+                {
+                    b.HasOne("Oy.Api.Domain.TrainingProgram", "Program")
+                        .WithMany()
+                        .HasForeignKey("ProgramId")
+                        .OnDelete(DeleteBehavior.Cascade);
+
+                    b.Navigation("Program");
+                });
+
+            modelBuilder.Entity("Oy.Api.Domain.GuardianLink", b =>
+                {
+                    b.HasOne("Oy.Api.Domain.Enrollment", "Enrollment")
+                        .WithMany()
+                        .HasForeignKey("EnrollmentId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("Oy.Api.Domain.User", "User")
+                        .WithMany("GuardianLinks")
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Enrollment");
+
+                    b.Navigation("User");
+                });
+
             modelBuilder.Entity("Oy.Api.Domain.Invoice", b =>
                 {
                     b.HasOne("Oy.Api.Domain.Payment", "Payment")
@@ -867,6 +1323,33 @@ namespace Oy.Api.Data.Migrations
                         .IsRequired();
 
                     b.Navigation("Payment");
+                });
+
+            modelBuilder.Entity("Oy.Api.Domain.ObservationNote", b =>
+                {
+                    b.HasOne("Oy.Api.Domain.Enrollment", "Enrollment")
+                        .WithMany()
+                        .HasForeignKey("EnrollmentId")
+                        .OnDelete(DeleteBehavior.NoAction)
+                        .IsRequired();
+
+                    b.HasOne("Oy.Api.Domain.TrainingProgram", "Program")
+                        .WithMany()
+                        .HasForeignKey("ProgramId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("Oy.Api.Domain.Session", "Session")
+                        .WithMany("Notes")
+                        .HasForeignKey("SessionId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Enrollment");
+
+                    b.Navigation("Program");
+
+                    b.Navigation("Session");
                 });
 
             modelBuilder.Entity("Oy.Api.Domain.Payment", b =>
@@ -929,10 +1412,21 @@ namespace Oy.Api.Data.Migrations
                     b.HasOne("Oy.Api.Domain.Role", "Role")
                         .WithMany("Users")
                         .HasForeignKey("RoleId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("Oy.Api.Domain.Staff", "Staff")
+                        .WithMany()
+                        .HasForeignKey("StaffId")
+                        .OnDelete(DeleteBehavior.SetNull);
 
                     b.Navigation("Role");
+
+                    b.Navigation("Staff");
+                });
+
+            modelBuilder.Entity("Oy.Api.Domain.ClassPhoto", b =>
+                {
+                    b.Navigation("Tags");
                 });
 
             modelBuilder.Entity("Oy.Api.Domain.Enrollment", b =>
@@ -950,6 +1444,13 @@ namespace Oy.Api.Data.Migrations
                     b.Navigation("Users");
                 });
 
+            modelBuilder.Entity("Oy.Api.Domain.Session", b =>
+                {
+                    b.Navigation("Attendance");
+
+                    b.Navigation("Notes");
+                });
+
             modelBuilder.Entity("Oy.Api.Domain.Staff", b =>
                 {
                     b.Navigation("Assignments");
@@ -964,6 +1465,11 @@ namespace Oy.Api.Data.Migrations
                     b.Navigation("Expenses");
 
                     b.Navigation("Sessions");
+                });
+
+            modelBuilder.Entity("Oy.Api.Domain.User", b =>
+                {
+                    b.Navigation("GuardianLinks");
                 });
 #pragma warning restore 612, 618
         }

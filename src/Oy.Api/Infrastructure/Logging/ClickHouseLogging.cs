@@ -51,7 +51,7 @@ public sealed class RequestLoggingMiddleware(RequestDelegate next, ClickHouseLog
                     Timestamp = DateTime.UtcNow,
                     Method = ctx.Request.Method,
                     Path = ctx.Request.Path.Value ?? "",
-                    Query = ctx.Request.QueryString.Value ?? "",
+                    Query = RedactToken(ctx.Request.QueryString.Value ?? ""),
                     Status = ctx.Response.StatusCode,
                     DurationMs = Stopwatch.GetElapsedTime(start).TotalMilliseconds,
                     UserId = ctx.User.UserId()?.ToString() ?? "",
@@ -62,6 +62,13 @@ public sealed class RequestLoggingMiddleware(RequestDelegate next, ClickHouseLog
             }
         }
     }
+
+    /// <summary>
+    /// Credentials in query strings must never reach the logs: SignalR's <c>access_token</c> and the signature
+    /// <c>s</c> of private file links (the link itself grants access).
+    /// </summary>
+    private static string RedactToken(string query) =>
+        System.Text.RegularExpressions.Regex.Replace(query, "(?i)([?&](?:access_token|s)=)[^&]*", "$1***");
 }
 
 public static class ClickHouseLoggingSetup

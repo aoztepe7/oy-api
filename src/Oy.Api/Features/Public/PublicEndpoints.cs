@@ -1,10 +1,12 @@
 using System.ComponentModel.DataAnnotations;
+using System.Security.Claims;
 using Microsoft.EntityFrameworkCore;
 using Oy.Api.Data;
 using Oy.Api.Domain;
 using Oy.Api.Features.Content;
 using Oy.Api.Features.Programs;
 using Oy.Api.Infrastructure;
+using Oy.Api.Infrastructure.Auth;
 
 namespace Oy.Api.Features.Public;
 
@@ -162,26 +164,31 @@ public static class DashboardEndpoints
 {
     public static void MapDashboard(this IEndpointRouteBuilder app)
     {
-        app.MapGet("/api/admin/dashboard", async (AppDbContext db) =>
+        app.MapGet("/api/admin/dashboard", async (AppDbContext db, ClaimsPrincipal me) =>
         {
             var today = DateOnly.FromDateTime(DateTime.UtcNow);
-            var monthStart = FinanceCalculator.MonthStart(today);
-            var monthEnd = FinanceCalculator.MonthEnd(today);
-
-            var programs = await db.Programs.AsNoTracking()
-                .Where(p => p.StartDate <= monthEnd && p.EndDate >= monthStart)
-                .Include(p => p.Enrollments).Include(p => p.Sessions)
-                .Include(p => p.Expenses.Where(e => e.Date >= monthStart && e.Date <= monthEnd))
-                .Include(p => p.Assignments).ThenInclude(a => a.Staff)
-                .AsSplitQuery().ToListAsync();
-
-            decimal revenue = 0, cost = 0;
-            foreach (var p in programs)
+            decimal? revenue = null, cost = null;
+            // Money only for dashboard.finance (and not even computed otherwise).
+            if (me.Can(Permissions.DashboardFinance))
             {
-                var held = p.Sessions.Where(s => !s.IsCancelled).Select(s => s.Date).ToList();
-                revenue += p.Enrollments.Sum(e => FinanceCalculator.EnrollmentRevenue(e, p.EndDate, monthStart));
-                cost += p.Assignments.Sum(a => FinanceCalculator.AssignmentCost(a, a.Staff, held, monthStart).Total);
-                cost += p.Expenses.Sum(e => e.Amount);
+                var monthStart = FinanceCalculator.MonthStart(today);
+                var monthEnd = FinanceCalculator.MonthEnd(today);
+                var programs = await db.Programs.AsNoTracking()
+                    .Where(p => p.StartDate <= monthEnd && p.EndDate >= monthStart)
+                    .Include(p => p.Enrollments).Include(p => p.Sessions)
+                    .Include(p => p.Expenses.Where(e => e.Date >= monthStart && e.Date <= monthEnd))
+                    .Include(p => p.Assignments).ThenInclude(a => a.Staff)
+                    .AsSplitQuery().ToListAsync();
+
+                revenue = 0;
+                cost = 0;
+                foreach (var p in programs)
+                {
+                    var held = p.Sessions.Where(s => !s.IsCancelled).Select(s => s.Date).ToList();
+                    revenue += p.Enrollments.Sum(e => FinanceCalculator.EnrollmentRevenue(e, p.EndDate, monthStart));
+                    cost += p.Assignments.Sum(a => FinanceCalculator.AssignmentCost(a, a.Staff, held, monthStart).Total);
+                    cost += p.Expenses.Sum(e => e.Amount);
+                }
             }
 
             return new
@@ -194,6 +201,6 @@ public static class DashboardEndpoints
                 monthCost = cost,
                 upcomingSessions = await ProgramEndpoints.CalendarAsync(db, today, today.AddDays(7)),
             };
-        }).WithTags("Dashboard").RequireAuthorization();
+        }).WithTags("Dashboard").RequireAuthorization(Permissions.DashboardView);
     }
 }

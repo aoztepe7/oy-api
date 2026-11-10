@@ -1,8 +1,10 @@
 using System.ComponentModel.DataAnnotations;
+using System.Security.Claims;
 using Microsoft.EntityFrameworkCore;
 using Oy.Api.Data;
 using Oy.Api.Domain;
 using Oy.Api.Infrastructure;
+using Oy.Api.Infrastructure.Auth;
 
 namespace Oy.Api.Features.Programs;
 
@@ -39,7 +41,8 @@ public record PriceOptionInput(
 public record ProgramAdminDto(
     Guid Id, string Title, string Slug, ProgramType Type, int AgeMin, int AgeMax,
     DateOnly StartDate, DateOnly EndDate, int[] DaysOfWeek, TimeOnly StartTime, TimeOnly EndTime,
-    int Capacity, decimal Price, PricePeriod PricePeriod, List<PriceOption> PriceOptions, string Summary, string Description,
+    /// <summary><c>Price</c> / <c>PriceOptions</c> are null without the programs.pricing permission.</summary>
+    int Capacity, decimal? Price, PricePeriod PricePeriod, List<PriceOption>? PriceOptions, string Summary, string Description,
     string CoverImageUrl, string Location, bool IsPublished, int? FeaturedOrder,
     bool EnrollmentEnabled, EnrollmentFormConfig EnrollmentForm,
     int EnrolledCount, int SessionCount, DateTime CreatedAt, DateTime UpdatedAt,
@@ -52,7 +55,7 @@ public record FeaturedInput(Guid[] ProgramIds);
 public record SessionDto(
     Guid Id, DateOnly Date, TimeOnly StartTime, TimeOnly EndTime, bool IsCancelled, string Note,
     Guid? ThemeId, string? ThemeTitle, bool IsMakeup, DateOnly? MakeupForDate, DateOnly? MakeupDate,
-    IReadOnlyList<string> SpecialDays);
+    IReadOnlyList<string> SpecialDays, DateTime? StartedAt, DateTime? EndedAt);
 
 public record SessionUpdate(bool IsCancelled, [MaxLength(500)] string? Note, Guid? ThemeId);
 
@@ -71,30 +74,30 @@ public static class ProgramEndpoints
         var read = Permissions.ProgramsRead;
         var write = Permissions.ProgramsWrite;
 
-        group.MapGet("/programs", async (ProgramType? type, bool? published, AppDbContext db, MediaService media) =>
+        group.MapGet("/programs", async (ProgramType? type, bool? published, AppDbContext db, MediaService media, ClaimsPrincipal me) =>
         {
             var query = db.Programs.AsNoTracking();
             if (type is not null) query = query.Where(p => p.Type == type);
             if (published is not null) query = query.Where(p => p.IsPublished == published);
             var list = await Project(query.OrderByDescending(p => p.StartDate)).ToListAsync();
-            return list.Select(p => p with { CoverImageUrl = media.ToPublic(p.CoverImageUrl) });
+            return list.Select(p => Shape(p, me, media));
         }).RequireAuthorization(read);
 
-        group.MapGet("/programs/{id:guid}", async (Guid id, AppDbContext db, MediaService media) =>
+        group.MapGet("/programs/{id:guid}", async (Guid id, AppDbContext db, MediaService media, ClaimsPrincipal me) =>
             await Project(db.Programs.AsNoTracking().Where(p => p.Id == id)).FirstOrDefaultAsync() is { } p
-                ? Results.Ok(p with { CoverImageUrl = media.ToPublic(p.CoverImageUrl) })
+                ? Results.Ok(Shape(p, me, media))
                 : Results.NotFound()).RequireAuthorization(read);
 
-        group.MapPost("/programs", async (ProgramInput input, AppDbContext db, MediaService media, UiRevalidator ui) =>
+        group.MapPost("/programs", async (ProgramInput input, AppDbContext db, MediaService media, UiRevalidator ui, ClaimsPrincipal me) =>
         {
             var program = new TrainingProgram { Title = "", Slug = "" };
-            return await SaveAsync(program, input, db, media, ui, isNew: true);
+            return await SaveAsync(program, input, db, media, ui, me, isNew: true);
         }).RequireAuthorization(write);
 
-        group.MapPut("/programs/{id:guid}", async (Guid id, ProgramInput input, AppDbContext db, MediaService media, UiRevalidator ui) =>
+        group.MapPut("/programs/{id:guid}", async (Guid id, ProgramInput input, AppDbContext db, MediaService media, UiRevalidator ui, ClaimsPrincipal me) =>
         {
             var program = await db.Programs.Include(p => p.Sessions).FirstOrDefaultAsync(p => p.Id == id);
-            return program is null ? Results.NotFound() : await SaveAsync(program, input, db, media, ui, isNew: false);
+            return program is null ? Results.NotFound() : await SaveAsync(program, input, db, media, ui, me, isNew: false);
         }).RequireAuthorization(write);
 
         group.MapPut("/programs/featured", async (FeaturedInput input, AppDbContext db, UiRevalidator ui) =>
@@ -117,6 +120,8 @@ public static class ProgramEndpoints
         {
             if (await db.Payments.AnyAsync(p => p.Enrollment.ProgramId == id))
                 return ApiResults.Conflict("Ödemesi olan bir eğitim silinemez. Yayından kaldırabilirsiniz.");
+            if (await db.ObservationNotes.AnyAsync(n => n.ProgramId == id))
+                return ApiResults.Conflict("Gözlem notu yazılmış bir eğitim silinemez. Yayından kaldırabilirsiniz.");
             var deleted = await db.Programs.Where(p => p.Id == id).ExecuteDeleteAsync();
             if (deleted == 0) return Results.NotFound();
             await ui.RevalidateAsync(CacheTags.Programs);
@@ -133,6 +138,8 @@ public static class ProgramEndpoints
             if (s is null) return Results.NotFound();
             if (s.IsMakeup && input.IsCancelled)
                 return ApiResults.Conflict("Telafi dersi iptal edilmez; gerekirse silin.");
+            if (input.IsCancelled && !s.IsCancelled && s.StartedAt is not null)
+                return ApiResults.Conflict("Başlatılmış (yoklaması alınmış) ders iptal edilemez.");
             if (!input.IsCancelled && s.IsCancelled && await db.Sessions.AnyAsync(m => m.MakeupForSessionId == id))
                 return ApiResults.Conflict("Bu dersin telafisi planlanmış. İptali geri almak için önce telafi dersini silin.");
             if (input.ThemeId is { } themeId && !await db.Themes.AnyAsync(t => t.Id == themeId))
@@ -181,6 +188,7 @@ public static class ProgramEndpoints
             var s = await db.Sessions.FindAsync(id);
             if (s is null) return Results.NotFound();
             if (!s.IsMakeup) return ApiResults.Conflict("Planlı dersler silinemez; iptal edebilirsiniz.");
+            if (s.StartedAt is not null) return ApiResults.Conflict("Başlatılmış (yoklaması alınmış) ders silinemez.");
             db.Sessions.Remove(s);
             await db.SaveChangesAsync();
             return Results.NoContent();
@@ -204,6 +212,7 @@ public static class ProgramEndpoints
                 s.IsMakeup,
                 MakeupForDate = s.MakeupFor != null ? s.MakeupFor.Date : (DateOnly?)null,
                 MakeupDate = db.Sessions.Where(m => m.MakeupForSessionId == s.Id).Select(m => (DateOnly?)m.Date).FirstOrDefault(),
+                s.StartedAt, s.EndedAt,
             }).ToListAsync();
         if (rows.Count == 0) return [];
 
@@ -214,7 +223,7 @@ public static class ProgramEndpoints
 
         return rows.Select(s => new SessionDto(
             s.Id, s.Date, s.StartTime, s.EndTime, s.IsCancelled, s.Note, s.ThemeId, s.ThemeTitle,
-            s.IsMakeup, s.MakeupForDate, s.MakeupDate, special[s.Date].ToList())).ToList();
+            s.IsMakeup, s.MakeupForDate, s.MakeupDate, special[s.Date].ToList(), s.StartedAt, s.EndedAt)).ToList();
     }
 
     public static async Task<List<CalendarItem>> CalendarAsync(AppDbContext db, DateOnly from, DateOnly to)
@@ -239,9 +248,20 @@ public static class ProgramEndpoints
                 .Select(a => a.FullName).ToList())).ToList();
     }
 
+    /// <summary>Public cover URL; prices only for users who may see them.</summary>
+    private static ProgramAdminDto Shape(ProgramAdminDto p, ClaimsPrincipal me, MediaService media) =>
+        p with
+        {
+            CoverImageUrl = media.ToPublic(p.CoverImageUrl),
+            Price = me.Can(Permissions.ProgramsPricing) ? p.Price : null,
+            PriceOptions = me.Can(Permissions.ProgramsPricing) ? p.PriceOptions : null,
+        };
+
     private static async Task<IResult> SaveAsync(
-        TrainingProgram p, ProgramInput input, AppDbContext db, MediaService media, UiRevalidator ui, bool isNew)
+        TrainingProgram p, ProgramInput input, AppDbContext db, MediaService media, UiRevalidator ui, ClaimsPrincipal me, bool isNew)
     {
+        // Without the pricing permission prices are neither shown nor changed: the stored ones are kept.
+        var canPrice = me.Can(Permissions.ProgramsPricing);
         var days = (input.DaysOfWeek ?? []).Distinct().Order().ToArray();
         // Regular groups are planned and priced by month: whole calendar months, monthly fee.
         var monthly = input.Type == ProgramType.WeeklyClass;
@@ -256,7 +276,7 @@ public static class ProgramEndpoints
             .Check(days.Length > 0 && days.All(d => d is >= 1 and <= 7), "daysOfWeek", "En az bir geçerli gün seçin.")
             .Check(slug.Length > 0, "slug", "Geçerli bir adres (slug) girin.");
         // Empty rows from the editor are ignored; a row with a price needs a label.
-        var options = (input.PriceOptions ?? [])
+        var options = (canPrice ? input.PriceOptions ?? [] : [])
             .Where(o => !string.IsNullOrWhiteSpace(o.Label) || o.Price > 0)
             .Select(o => new PriceOption(o.Label?.Trim() ?? "", o.Price, o.Note?.Trim() ?? "", o.IsAddon))
             .ToList();
@@ -281,9 +301,12 @@ public static class ProgramEndpoints
         p.StartTime = input.StartTime;
         p.EndTime = input.EndTime;
         p.Capacity = input.Capacity;
-        p.PriceOptions = options;
-        // With a price table the base price is the cheapest package ("… den başlayan").
-        p.Price = options.Any(o => !o.IsAddon) ? options.Where(o => !o.IsAddon).Min(o => o.Price) : input.Price;
+        if (canPrice)
+        {
+            p.PriceOptions = options;
+            // With a price table the base price is the cheapest package ("… den başlayan").
+            p.Price = options.Any(o => !o.IsAddon) ? options.Where(o => !o.IsAddon).Min(o => o.Price) : input.Price;
+        }
         p.PricePeriod = monthly ? PricePeriod.Monthly : input.PricePeriod;
         p.Summary = input.Summary?.Trim() ?? "";
         p.Description = input.Description?.Trim() ?? "";
@@ -298,8 +321,7 @@ public static class ProgramEndpoints
         await db.SaveChangesAsync();
         await ui.RevalidateAsync(CacheTags.Programs);
 
-        var dto = await Project(db.Programs.AsNoTracking().Where(x => x.Id == p.Id)).FirstAsync();
-        dto = dto with { CoverImageUrl = media.ToPublic(dto.CoverImageUrl) };
+        var dto = Shape(await Project(db.Programs.AsNoTracking().Where(x => x.Id == p.Id)).FirstAsync(), me, media);
         return isNew ? Results.Created($"/api/admin/programs/{p.Id}", dto) : Results.Ok(dto);
     }
 
@@ -310,7 +332,8 @@ public static class ProgramEndpoints
     private static void SyncSessions(TrainingProgram p, AppDbContext db)
     {
         var dates = p.ScheduledDates().ToHashSet();
-        foreach (var s in p.Sessions.Where(s => !s.IsMakeup && !dates.Contains(s.Date)).ToList())
+        // A started lesson holds attendance and notes: it stays even when the schedule no longer has its date.
+        foreach (var s in p.Sessions.Where(s => !s.IsMakeup && s.StartedAt == null && !dates.Contains(s.Date)).ToList())
         {
             p.Sessions.Remove(s);
             db.Sessions.Remove(s);

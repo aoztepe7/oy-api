@@ -23,6 +23,14 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<SpecialDay> SpecialDays => Set<SpecialDay>();
     public DbSet<ContactMessage> ContactMessages => Set<ContactMessage>();
     public DbSet<IntegrationConfig> Integrations => Set<IntegrationConfig>();
+    public DbSet<Attendance> Attendance => Set<Attendance>();
+    public DbSet<ObservationNote> ObservationNotes => Set<ObservationNote>();
+    public DbSet<GuardianLink> GuardianLinks => Set<GuardianLink>();
+    public DbSet<PrivateFile> PrivateFiles => Set<PrivateFile>();
+    public DbSet<FeedPost> FeedPosts => Set<FeedPost>();
+    public DbSet<ClassPhoto> ClassPhotos => Set<ClassPhoto>();
+    public DbSet<ClassPhotoTag> ClassPhotoTags => Set<ClassPhotoTag>();
+    public DbSet<MediaAsset> MediaAssets => Set<MediaAsset>();
 
     protected override void ConfigureConventions(ModelConfigurationBuilder b)
     {
@@ -37,6 +45,9 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
         b.Properties<ThemeKind>().HaveConversion<string>().HaveMaxLength(32);
         b.Properties<SpecialDayKind>().HaveConversion<string>().HaveMaxLength(32);
         b.Properties<IntegrationType>().HaveConversion<string>().HaveMaxLength(32);
+        b.Properties<AttendanceStatus>().HaveConversion<string>().HaveMaxLength(32);
+        b.Properties<UserKind>().HaveConversion<string>().HaveMaxLength(32);
+        b.Properties<GuardianRelation>().HaveConversion<string>().HaveMaxLength(32);
         b.Properties<decimal>().HavePrecision(14, 2);
     }
 
@@ -47,6 +58,8 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             e.HasIndex(x => x.Email).IsUnique();
             e.Property(x => x.Email).HasMaxLength(256);
             e.HasOne(x => x.Role).WithMany(x => x.Users).OnDelete(DeleteBehavior.Restrict);
+            e.HasOne(x => x.Staff).WithMany().OnDelete(DeleteBehavior.SetNull);
+            e.HasIndex(x => x.StaffId).IsUnique();
         });
         b.Entity<Role>().HasIndex(x => x.Name).IsUnique();
 
@@ -71,6 +84,70 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
         {
             e.HasIndex(x => new { x.ProgramId, x.Status });
             Json(e.Property(x => x.Answers));
+        });
+        // Attendance and notes go with their session (and so with a deleted program). Deleting an enrollment
+        // that has any is refused by the endpoints; NoAction (checked at statement end) lets a program cascade.
+        b.Entity<Attendance>(e =>
+        {
+            e.HasIndex(x => new { x.SessionId, x.EnrollmentId }).IsUnique();
+            e.HasOne(x => x.Session).WithMany(x => x.Attendance).OnDelete(DeleteBehavior.Cascade);
+            e.HasOne(x => x.Enrollment).WithMany().OnDelete(DeleteBehavior.NoAction);
+        });
+        b.Entity<ObservationNote>(e =>
+        {
+            e.Property(x => x.Text).HasMaxLength(2000);
+            e.HasIndex(x => new { x.ProgramId, x.EnrollmentId });
+            e.HasIndex(x => x.SessionId);
+            e.HasOne(x => x.Program).WithMany().OnDelete(DeleteBehavior.Cascade);
+            e.HasOne(x => x.Session).WithMany(x => x.Notes).OnDelete(DeleteBehavior.Cascade);
+            e.HasOne(x => x.Enrollment).WithMany().OnDelete(DeleteBehavior.NoAction);
+            Json(e.Property(x => x.Tags));
+        });
+        b.Entity<GuardianLink>(e =>
+        {
+            e.HasIndex(x => new { x.UserId, x.EnrollmentId }).IsUnique();
+            e.HasOne(x => x.User).WithMany(x => x.GuardianLinks).OnDelete(DeleteBehavior.Cascade);
+            e.HasOne(x => x.Enrollment).WithMany().OnDelete(DeleteBehavior.Cascade);
+        });
+        b.Entity<PrivateFile>(e =>
+        {
+            e.Property(x => x.StoredName).HasMaxLength(100);
+            e.Property(x => x.ContentType).HasMaxLength(50);
+            e.Property(x => x.Folder).HasMaxLength(20);
+            e.Property(x => x.OriginalName).HasMaxLength(255);
+            e.HasIndex(x => new { x.Folder, x.CreatedAt });
+        });
+        b.Entity<MediaAsset>(e =>
+        {
+            e.Property(x => x.Url).HasMaxLength(300);
+            e.Property(x => x.Folder).HasMaxLength(100);
+            e.Property(x => x.OriginalName).HasMaxLength(255);
+            e.Property(x => x.ContentType).HasMaxLength(50);
+            e.HasIndex(x => x.Url).IsUnique();
+            e.HasIndex(x => new { x.Folder, x.CreatedAt });
+        });
+        b.Entity<FeedPost>(e =>
+        {
+            e.HasIndex(x => x.PublishedAt);
+            // A post for one program goes with it (it must never fall back to "everyone").
+            e.HasOne(x => x.Program).WithMany().OnDelete(DeleteBehavior.Cascade);
+            Json(e.Property(x => x.ImageIds));
+        });
+        b.Entity<ClassPhoto>(e =>
+        {
+            e.HasIndex(x => x.SessionId);
+            e.HasIndex(x => x.PublishedAt);
+            e.Property(x => x.Caption).HasMaxLength(300);
+            e.HasOne(x => x.Session).WithMany().OnDelete(DeleteBehavior.Cascade);
+            e.HasOne(x => x.Program).WithMany().OnDelete(DeleteBehavior.Cascade);
+            e.HasOne(x => x.File).WithMany().OnDelete(DeleteBehavior.Restrict);
+        });
+        b.Entity<ClassPhotoTag>(e =>
+        {
+            e.HasKey(x => new { x.PhotoId, x.EnrollmentId });
+            e.HasIndex(x => x.EnrollmentId);
+            e.HasOne(x => x.Photo).WithMany(x => x.Tags).OnDelete(DeleteBehavior.Cascade);
+            e.HasOne(x => x.Enrollment).WithMany().OnDelete(DeleteBehavior.Cascade);
         });
         b.Entity<Payment>().HasOne(x => x.Invoice).WithOne(x => x.Payment).HasForeignKey<Invoice>(x => x.PaymentId);
         b.Entity<Invoice>().HasIndex(x => x.Status);

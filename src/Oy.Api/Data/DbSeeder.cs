@@ -16,9 +16,11 @@ public class SeedOptions
 /// </summary>
 public static class DbSeeder
 {
-    public static async Task SeedAsync(AppDbContext db, IPasswordHasher<User> hasher, SeedOptions options, string mediaRoot)
+    public static async Task SeedAsync(AppDbContext db, IPasswordHasher<User> hasher, SeedOptions options, Infrastructure.IFileStorage storage)
     {
-        SeedMedia.CopyTo(mediaRoot);
+        await SeedMedia.CopyToAsync(storage);
+        // Files uploaded before the media library existed get a library row (idempotent).
+        await Features.Content.MediaLibraryEndpoints.ImportExistingAsync(db, storage);
         await SeedRolesAndAdminAsync(db, hasher, options);
         await RemoveDemoDataAsync(db);
         await SeedPagesAsync(db);
@@ -36,17 +38,24 @@ public static class DbSeeder
         var roles = new Dictionary<string, List<string>>
         {
             ["Yönetici"] = [.. Permissions.All.Keys],
+            // Runs the programs, sees prices and parent contacts; no salaries, fees or profitability.
             ["Eğitim Koordinatörü"] =
             [
-                Permissions.ProgramsRead, Permissions.ProgramsWrite, Permissions.StaffRead,
-                Permissions.EnrollmentsRead, Permissions.EnrollmentsWrite,
+                Permissions.DashboardView, Permissions.ProgramsRead, Permissions.ProgramsPricing, Permissions.ProgramsWrite,
+                Permissions.StaffRead, Permissions.EnrollmentsRead, Permissions.EnrollmentsContact, Permissions.EnrollmentsWrite,
+                Permissions.GuardiansManage, Permissions.FeedManage,
             ],
             ["Muhasebe"] =
             [
-                Permissions.ProgramsRead, Permissions.StaffRead, Permissions.EnrollmentsRead,
+                Permissions.DashboardView, Permissions.DashboardFinance,
+                Permissions.ProgramsRead, Permissions.ProgramsPricing, Permissions.ProgramsFinance,
+                Permissions.StaffRead, Permissions.StaffCompensation,
+                Permissions.EnrollmentsRead, Permissions.EnrollmentsFees,
                 Permissions.FinanceRead, Permissions.FinanceWrite,
             ],
-            ["İçerik Editörü"] = [Permissions.ContentWrite, Permissions.ProgramsRead],
+            ["İçerik Editörü"] = [Permissions.DashboardView, Permissions.ContentWrite, Permissions.ProgramsRead],
+            // Teachers only see the classrooms of the programs their linked staff record is assigned to.
+            ["Öğretmen"] = [Permissions.ClassroomUse],
         };
         foreach (var (name, perms) in roles)
         {

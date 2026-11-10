@@ -9,9 +9,12 @@ using Microsoft.Extensions.Options;
 using Oy.Api.Data;
 using Oy.Api.Domain;
 using Oy.Api.Features.Auth;
+using Oy.Api.Features.Classroom;
 using Oy.Api.Features.Content;
 using Oy.Api.Features.Enrollments;
+using Oy.Api.Features.Feed;
 using Oy.Api.Features.Finance;
+using Oy.Api.Features.Guardians;
 using Oy.Api.Features.Programs;
 using Oy.Api.Features.Public;
 using Oy.Api.Features.Settings;
@@ -100,7 +103,31 @@ foreach (var name in new[] { "Uyumsoft", "QnbEFinans", "Logo" })
     builder.Services.AddSingleton<IEInvoiceProvider>(new PendingEInvoiceProvider(name));
 builder.Services.AddHostedService<InvoiceWorker>();
 
+// Live classroom (attendance + notes) pushes. Single instance; a Redis backplane is needed to scale out.
+builder.Services.AddSignalR().AddJsonProtocol(o =>
+    o.PayloadSerializerOptions.Converters.Add(new JsonStringEnumConverter()));
+builder.Services.AddSingleton<ClassroomNotifier>();
+
+// Private files (children's photos, feed images): signed links only, never static.
+builder.Services.Configure<PrivateFileOptions>(config.GetSection("PrivateFiles"));
+builder.Services.AddSingleton<PrivateFileService>();
+
+// File storage: DigitalOcean Spaces when Storage:Spaces is filled in, otherwise the server's disk.
+builder.Services.Configure<SpacesOptions>(config.GetSection("Storage:Spaces"));
+var spaces = config.GetSection("Storage:Spaces").Get<SpacesOptions>() ?? new();
+if (spaces.IsConfigured) builder.Services.AddSingleton<IFileStorage, SpacesFileStorage>();
+else builder.Services.AddSingleton<IFileStorage, LocalFileStorage>();
+
 var app = builder.Build();
+
+app.Logger.LogInformation("Dosya depolama: {Storage}", app.Services.GetRequiredService<IFileStorage>().Description);
+
+// One-off: copy files from the server's disk to Spaces, then exit.
+if (args.Contains(StorageSync.Command))
+{
+    Environment.ExitCode = await StorageSync.RunAsync(app.Services);
+    return;
+}
 
 await MigrateAndSeedAsync(app);
 
@@ -134,6 +161,14 @@ app.MapPrograms();
 app.MapSpecialDays();
 app.MapStaff();
 app.MapEnrollments();
+app.MapClassroom();
+app.MapHub<ClassroomHub>(ClassroomHub.Path);
+app.MapClassPhotos();
+app.MapGuardianAdmin();
+app.MapChildPhotos();
+app.MapMediaLibrary();
+app.MapGuardian();
+app.MapFeed();
 app.MapFinance();
 app.MapContent();
 app.MapPages();
@@ -150,7 +185,7 @@ static async Task MigrateAndSeedAsync(WebApplication app)
     await DbSeeder.SeedAsync(db,
         scope.ServiceProvider.GetRequiredService<IPasswordHasher<User>>(),
         scope.ServiceProvider.GetRequiredService<IOptions<SeedOptions>>().Value,
-        scope.ServiceProvider.GetRequiredService<MediaService>().FullPath);
+        scope.ServiceProvider.GetRequiredService<IFileStorage>());
 }
 
 public partial class Program;

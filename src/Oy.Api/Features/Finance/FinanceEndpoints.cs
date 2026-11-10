@@ -1,7 +1,9 @@
 using System.ComponentModel.DataAnnotations;
+using System.Security.Claims;
 using Microsoft.EntityFrameworkCore;
 using Oy.Api.Data;
 using Oy.Api.Domain;
+using Oy.Api.Infrastructure.Auth;
 using Oy.Api.Infrastructure.Integrations;
 
 namespace Oy.Api.Features.Finance;
@@ -33,15 +35,17 @@ public static class FinanceEndpoints
         var write = Permissions.FinanceWrite;
 
         // Expenses
-        group.MapGet("/expenses", async (Guid? programId, DateOnly? from, DateOnly? to, AppDbContext db) =>
+        // One program's expenses belong to its profitability view; all expenses to the finance page.
+        group.MapGet("/expenses", async (Guid? programId, DateOnly? from, DateOnly? to, AppDbContext db, ClaimsPrincipal me) =>
         {
+            if (programId is null && !me.Can(read)) return Results.Forbid();
             var q = db.Expenses.AsNoTracking();
             if (programId is not null) q = q.Where(e => e.ProgramId == programId);
             if (from is not null) q = q.Where(e => e.Date >= from);
             if (to is not null) q = q.Where(e => e.Date <= to);
-            return await q.OrderByDescending(e => e.Date)
-                .Select(e => new ExpenseDto(e.Id, e.ProgramId, e.Program.Title, e.Date, e.Category, e.Description, e.Amount)).ToListAsync();
-        }).RequireAuthorization(read);
+            return Results.Ok(await q.OrderByDescending(e => e.Date)
+                .Select(e => new ExpenseDto(e.Id, e.ProgramId, e.Program.Title, e.Date, e.Category, e.Description, e.Amount)).ToListAsync());
+        }).RequireAnyPermission(read, Permissions.ProgramsFinance);
 
         group.MapPost("/expenses", async (ExpenseInput input, AppDbContext db) =>
         {
@@ -68,7 +72,7 @@ public static class FinanceEndpoints
             if (p is null) return Results.NotFound();
             var months = FinanceCalculator.ProgramFinance(p);
             return Results.Ok(new ProgramFinanceDto(p.Id, p.Title, months, Totals(months)));
-        }).RequireAuthorization(read);
+        }).RequireAnyPermission(read, Permissions.ProgramsFinance);
 
         group.MapGet("/finance/summary", async (AppDbContext db) =>
         {
@@ -81,12 +85,14 @@ public static class FinanceEndpoints
         }).RequireAuthorization(read);
 
         // Payments
-        group.MapGet("/payments", async (Guid? enrollmentId, AppDbContext db) =>
+        // One enrollment's payments are part of its fee details; the full list is the finance page.
+        group.MapGet("/payments", async (Guid? enrollmentId, AppDbContext db, ClaimsPrincipal me) =>
         {
+            if (enrollmentId is null && !me.Can(read)) return Results.Forbid();
             var q = db.Payments.AsNoTracking();
             if (enrollmentId is not null) q = q.Where(p => p.EnrollmentId == enrollmentId);
-            return await ProjectPayments(q.OrderByDescending(p => p.PaidAt)).Take(500).ToListAsync();
-        }).RequireAuthorization(read);
+            return Results.Ok(await ProjectPayments(q.OrderByDescending(p => p.PaidAt)).Take(500).ToListAsync());
+        }).RequireAnyPermission(read, Permissions.EnrollmentsFees);
 
         group.MapPost("/payments", async (PaymentInput input, AppDbContext db, InvoiceService invoices, CancellationToken ct) =>
         {

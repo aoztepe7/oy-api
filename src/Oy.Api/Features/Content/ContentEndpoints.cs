@@ -65,14 +65,7 @@ public static class ContentEndpoints
                 ? Results.NoContent()
                 : Results.NotFound()).RequireAuthorization(Permissions.EnrollmentsRead);
 
-        // Media upload
-        admin.MapPost("/media", async (IFormFile file, MediaService media, CancellationToken ct) =>
-        {
-            var stored = await media.SaveAsync(file, ct);
-            return stored is null
-                ? new Errors().Check(false, "file", "Sadece JPG, PNG veya WEBP (en fazla 5 MB) yüklenebilir.").ToResult()
-                : Results.Ok(new { url = media.ToPublic(stored) });
-        }).RequireAuthorization(Permissions.MediaUpload).DisableAntiforgery();
+        // Media upload and library: see MediaLibraryEndpoints.
     }
 
     private static void Apply(Theme t, ThemeInput i, MediaService media)

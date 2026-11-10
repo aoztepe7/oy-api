@@ -1,7 +1,7 @@
-# Okulum Yeryüzü — full stack.
-#   Local:      docker compose up -d --build
-#   Production: docker compose --profile prod up -d --build   (adds Caddy with automatic HTTPS)
-# Secrets come from .env (copy .env.example).
+# Okulum Yeryüzü — API stack: postgres + clickhouse + api.
+# Only the api joins the shared "web" network (Caddy reaches it there, internal port 3003).
+# ClickHouse serves HTTP on 3004 (set via the clickhouse-http-port config below).
+# Postgres and ClickHouse stay on the stack's private network; no ports are published.
 
 name: okulumyeryuzu
 
@@ -12,103 +12,89 @@ services:
     environment:
       POSTGRES_DB: okulumyeryuzu
       POSTGRES_USER: oy
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}
     volumes:
       - pgdata:/var/lib/postgresql/data
-    ports:
-      - "127.0.0.1:${POSTGRES_HOST_PORT:-5432}:5432"
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U oy -d okulumyeryuzu"]
       interval: 5s
       timeout: 3s
       retries: 20
+    networks:
+      - internal
 
   clickhouse:
     image: clickhouse/clickhouse-server:25.8-alpine
     restart: unless-stopped
     environment:
       CLICKHOUSE_USER: oy
-      CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD:?set CLICKHOUSE_PASSWORD in .env}
+      CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD:?set CLICKHOUSE_PASSWORD}
       CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: 1
     volumes:
       - chdata:/var/lib/clickhouse
-    ports:
-      - "127.0.0.1:${CLICKHOUSE_HOST_PORT:-8123}:8123"
+    configs:
+      - source: clickhouse-http-port
+        target: /etc/clickhouse-server/config.d/http-port.xml
     ulimits:
       nofile: { soft: 262144, hard: 262144 }
     healthcheck:
-      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8123/ping || exit 1"]
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:3004/ping || exit 1"]
       interval: 5s
       timeout: 3s
       retries: 20
+    networks:
+      - internal
 
-  # api:
-    # build: ./oy-service
-    # restart: unless-stopped
-    # depends_on:
-      # postgres: { condition: service_healthy }
-      # clickhouse: { condition: service_healthy }
-    # environment:
-      # ConnectionStrings__Postgres: Host=postgres;Database=okulumyeryuzu;Username=oy;Password=${POSTGRES_PASSWORD}
-      # Jwt__Key: ${JWT_KEY:?set JWT_KEY in .env (min 32 chars)}
-      # Media__PublicBaseUrl: ${API_PUBLIC_URL:-http://localhost:8080}
-      # Ui__Url: http://ui:3000
-      # Ui__RevalidateSecret: ${REVALIDATE_SECRET:?set REVALIDATE_SECRET in .env}
-      # ClickHouse__Url: http://clickhouse:8123
-      # ClickHouse__User: oy
-      # ClickHouse__Password: ${CLICKHOUSE_PASSWORD}
-      # Cors__Origins__0: ${PANEL_PUBLIC_URL:-http://localhost:3001}
-      # Cors__Origins__1: ${SITE_URL:-http://localhost:3000}
-      # Seed__AdminEmail: ${ADMIN_EMAIL:-admin@okulumyeryuzu.com}
-      # Seed__AdminPassword: ${ADMIN_PASSWORD:?set ADMIN_PASSWORD in .env}
-      # Seed__SampleData: ${SEED_SAMPLE_DATA:-true}
-    # volumes:
-      # - apidata:/app/storage
-    # ports:
-      # - "8080:8080"
+  oy-api:
+    image: ${RUNARTECH_IMAGE}
+    restart: unless-stopped
+    depends_on:
+      postgres: { condition: service_healthy }
+      clickhouse: { condition: service_healthy }
+    environment:
+      ASPNETCORE_URLS: http://+:3003
+      ConnectionStrings__Postgres: Host=postgres;Database=okulumyeryuzu;Username=oy;Password=${POSTGRES_PASSWORD}
+      Jwt__Key: ${JWT_KEY:?set JWT_KEY (min 32 chars)}
+      Media__PublicBaseUrl: ${API_PUBLIC_URL:-https://service.okulumyeryuzu.com}
+      Ui__Url: ${UI_INTERNAL_URL:-http://oy-ui:3000}
+      Ui__RevalidateSecret: ${REVALIDATE_SECRET:?set REVALIDATE_SECRET}
+      ClickHouse__Url: http://clickhouse:3004
+      ClickHouse__User: oy
+      ClickHouse__Password: ${CLICKHOUSE_PASSWORD}
+      Cors__Origins__0: ${PANEL_PUBLIC_URL:?set PANEL_PUBLIC_URL}
+      Cors__Origins__1: ${SITE_URL:-https://new.okulumyeryuzu.com}
+      Seed__AdminEmail: ${ADMIN_EMAIL:?set ADMIN_EMAIL}
+      Seed__AdminPassword: ${ADMIN_PASSWORD:?set ADMIN_PASSWORD}
+    volumes:
+      - apidata:/app/storage
+    healthcheck:
+      # The aspnet image has no curl/wget; probe /health over bash's /dev/tcp.
+      test:
+        - CMD
+        - bash
+        - -c
+        - 'exec 3<>/dev/tcp/127.0.0.1/3003 && printf ''GET /health HTTP/1.0\r\nHost: localhost\r\n\r\n'' >&3 && head -n1 <&3 | grep -q '' 200 '''
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+    networks:
+      - internal
+      - web
 
-  # ui:
-    # build:
-      # context: ./oy-ui
-      # args:
-        # SITE_URL: ${SITE_URL:-http://localhost:3000}
-        # NEXT_PUBLIC_MEDIA_HOST: ${API_PUBLIC_URL:-http://localhost:8080}
-        # PANEL_ORIGINS: ${PANEL_PUBLIC_URL:-http://localhost:3001}
-    # restart: unless-stopped
-    # depends_on: [api]
-    # environment:
-      # API_URL: http://api:8080
-      # REVALIDATE_SECRET: ${REVALIDATE_SECRET}
-      # SITE_URL: ${SITE_URL:-http://localhost:3000}
-      # # Visual editor: the panel may embed /onizleme and talk to it (comma-separated origins).
-      # PANEL_ORIGINS: ${PANEL_PUBLIC_URL:-http://localhost:3001}
-      # NEXT_PUBLIC_MEDIA_HOST: ${API_PUBLIC_URL:-http://localhost:8080}
-    # ports:
-      # - "3000:3000"
+configs:
+  clickhouse-http-port:
+    content: |
+      <clickhouse>
+        <http_port>3004</http_port>
+      </clickhouse>
 
-  # panel:
-    # build: ./oy-panel
-    # restart: unless-stopped
-    # environment:
-      # API_URL: ${API_PUBLIC_URL:-http://localhost:8080}
-      # SITE_URL: ${SITE_URL:-http://localhost:3000}
-    # ports:
-      # - "3001:80"
-
-  # caddy:
-    # image: caddy:2-alpine
-    # profiles: [prod]
-    # restart: unless-stopped
-    # depends_on: [api, ui, panel]
-    # ports:
-      # - "80:80"
-      # - "443:443"
-    # volumes:
-      # - ./Caddyfile:/etc/caddy/Caddyfile:ro
-      # - caddydata:/data
+networks:
+  internal:
+  web:
+    external: true
 
 volumes:
   pgdata:
   chdata:
   apidata:
-  caddydata:

@@ -12,7 +12,7 @@ WORKDIR /app
 COPY --from=build /app .
 RUN mkdir -p /app/storage/media /app/storage/keys && chown -R app:app /app/storage
 USER app
-ENV ASPNETCORE_URLS=http://+:8080 \
+ENV ASPNETCORE_URLS=http://+:3003 \
     ASPNETCORE_ENVIRONMENT=Production
-EXPOSE 8080
+EXPOSE 3003
 ENTRYPOINT ["dotnet", "Oy.Api.dll"]

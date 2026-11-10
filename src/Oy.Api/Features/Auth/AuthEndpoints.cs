@@ -4,13 +4,17 @@ using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Oy.Api.Data;
 using Oy.Api.Domain;
+using Oy.Api.Features;
 using Oy.Api.Infrastructure.Auth;
 
 namespace Oy.Api.Features.Auth;
 
 public record LoginRequest([Required, EmailAddress] string Email, [Required] string Password);
 
-public record UserInfo(Guid Id, string Email, string FullName, string Role, IReadOnlyList<string> Permissions);
+/// <summary><c>Kind</c> decides the app: Staff → panel, Guardian → the guardians' feed.</summary>
+public record UserInfo(Guid Id, string Email, string FullName, string Role, IReadOnlyList<string> Permissions, UserKind Kind);
+
+public record ChangePasswordInput([Required] string CurrentPassword, [Required, MinLength(8)] string NewPassword);
 
 public record LoginResponse(string AccessToken, DateTime ExpiresAt, UserInfo User);
 
@@ -38,7 +42,22 @@ public static class AuthEndpoints
             var user = await db.Users.Include(u => u.Role).FirstOrDefaultAsync(u => u.Id == id && u.IsActive);
             return user is null ? Results.Unauthorized() : Results.Ok(ToInfo(user));
         }).RequireAuthorization();
+
+        // Any signed-in user (guardians replace the temporary password they were given).
+        group.MapPut("/password", async (ChangePasswordInput input, ClaimsPrincipal principal, AppDbContext db, IPasswordHasher<User> hasher) =>
+        {
+            var id = principal.UserId();
+            var user = await db.Users.FirstOrDefaultAsync(u => u.Id == id && u.IsActive);
+            if (user is null) return Results.Unauthorized();
+            if (hasher.VerifyHashedPassword(user, user.PasswordHash, input.CurrentPassword) == PasswordVerificationResult.Failed)
+                return new Errors().Check(false, "currentPassword", "Mevcut şifre hatalı.").ToResult();
+            user.PasswordHash = hasher.HashPassword(user, input.NewPassword);
+            await db.SaveChangesAsync();
+            return Results.NoContent();
+        }).RequireAuthorization().RequireRateLimiting("login");
     }
 
-    public static UserInfo ToInfo(User u) => new(u.Id, u.Email, u.FullName, u.Role.Name, u.Role.Permissions);
+    public static UserInfo ToInfo(User u) => u.Kind == UserKind.Guardian || u.Role is null
+        ? new(u.Id, u.Email, u.FullName, "Veli", [], u.Kind)
+        : new(u.Id, u.Email, u.FullName, u.Role.Name, u.Role.Permissions, u.Kind);
 }

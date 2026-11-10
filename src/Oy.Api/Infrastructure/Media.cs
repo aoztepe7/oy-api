@@ -12,25 +12,30 @@ public class MediaOptions
 }
 
 /// <summary>
-/// Media URLs are stored relative ("/media/x.webp") and exposed absolute,
-/// so changing the public domain never breaks stored content.
+/// Media URLs are stored relative ("/media/x.webp", optionally with "?focus=…") and exposed absolute, so changing
+/// the public domain — or moving files from the server's disk to DigitalOcean Spaces — never breaks stored content.
 /// </summary>
-public class MediaService(IOptions<MediaOptions> options)
+public class MediaService(IOptions<MediaOptions> options, IFileStorage storage)
 {
     public const string RoutePrefix = "/media/";
     private readonly MediaOptions _o = options.Value;
     private string BaseUrl => _o.PublicBaseUrl.TrimEnd('/');
+    /// <summary>Absolute prefix of media files where they are served: Spaces/CDN, or this API.</summary>
+    private string PublicPrefix => storage.PublicUrl(StorageKeys.Media) ?? BaseUrl + RoutePrefix;
 
     public string FullPath => System.IO.Path.GetFullPath(_o.Path);
 
     public string ToPublic(string? url) =>
-        string.IsNullOrEmpty(url) ? "" : url.StartsWith(RoutePrefix) ? BaseUrl + url : url;
+        string.IsNullOrEmpty(url) ? "" : url.StartsWith(RoutePrefix) ? PublicPrefix + url[RoutePrefix.Length..] : url;
 
     public string ToStored(string? url)
     {
         if (string.IsNullOrWhiteSpace(url)) return "";
         url = url.Trim();
-        return url.StartsWith(BaseUrl + RoutePrefix, StringComparison.OrdinalIgnoreCase) ? url[BaseUrl.Length..] : url;
+        // Either public form (Spaces/CDN or this API — also the old API form after a move) goes back to "/media/…".
+        foreach (var prefix in new[] { PublicPrefix, BaseUrl + RoutePrefix })
+            if (url.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)) return RoutePrefix + url[prefix.Length..];
+        return url;
     }
 
     private static readonly Dictionary<string, byte[][]> Signatures = new()
@@ -41,6 +46,7 @@ public class MediaService(IOptions<MediaOptions> options)
     };
 
     /// <summary>Validates by magic bytes (not by client-supplied name/type) and saves with a random name.</summary>
+    /// <returns>The stored relative URL ("/media/x.webp"), or null when the file is not an accepted image.</returns>
     public async Task<string?> SaveAsync(IFormFile file, CancellationToken ct)
     {
         if (file.Length == 0 || file.Length > _o.MaxBytes) return null;
@@ -52,11 +58,9 @@ public class MediaService(IOptions<MediaOptions> options)
         if (ext is null) return null;
         if (ext == ".webp" && (read < 12 || !header.AsSpan(8, 4).SequenceEqual("WEBP"u8))) return null;
 
-        Directory.CreateDirectory(FullPath);
         var name = $"{Guid.CreateVersion7():N}{ext}";
         stream.Position = 0;
-        await using var target = File.Create(System.IO.Path.Combine(FullPath, name));
-        await stream.CopyToAsync(target, ct);
+        await storage.SaveAsync(StorageKeys.Media + name, stream, StorageKeys.ContentTypeOf(name), isPublic: true, ct);
         return RoutePrefix + name;
     }
 }

@@ -69,6 +69,15 @@ public class Session : Entity
     /// <summary>The cancelled session this make-up lesson replaces.</summary>
     public Guid? MakeupForSessionId { get; set; }
     public Session? MakeupFor { get; set; }
+
+    /// <summary>When a teacher started the lesson (attendance opens); null = not started.</summary>
+    public DateTime? StartedAt { get; set; }
+    public string StartedByName { get; set; } = "";
+    /// <summary>When the lesson day was closed; attendance and notes are read-only until it is reopened.</summary>
+    public DateTime? EndedAt { get; set; }
+
+    public List<Attendance> Attendance { get; set; } = [];
+    public List<ObservationNote> Notes { get; set; } = [];
 }
 
 public class Expense : Entity
