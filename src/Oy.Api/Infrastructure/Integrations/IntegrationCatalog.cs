@@ -21,7 +21,6 @@ public static class IntegrationCatalog
         new("city", "İl"),
         new("email", "E-posta"),
         new("invoicePrefix", "Fatura seri öneki (3 karakter)"),
-        new("vatRate", "KDV oranı (%)"),
     ];
 
     private static readonly IntegrationField[] IntegratorSecrets =

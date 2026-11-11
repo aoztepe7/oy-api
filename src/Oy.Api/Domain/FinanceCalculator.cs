@@ -37,13 +37,15 @@ public static class FinanceCalculator
         return (decimal)(to.DayNumber - from.DayNumber + 1) / (last.DayNumber - first.DayNumber + 1);
     }
 
+    /// <summary>Fee of the month; a month with a manual amount (Ödeme takibi → özel fiyat) counts that amount.</summary>
     public static decimal EnrollmentRevenue(Enrollment e, DateOnly programEnd, DateOnly month)
     {
         if (!e.CountsAsRevenue) return 0;
+        var fee = e.DueAdjustments.FirstOrDefault(a => a.Period == MonthStart(month))?.Amount ?? e.Fee;
         if (e.FeePeriod == PricePeriod.OneTime)
-            return MonthStart(e.StartDate) == MonthStart(month) ? e.Fee : 0;
+            return MonthStart(e.StartDate) == MonthStart(month) ? fee : 0;
         var end = e.EndDate ?? programEnd;
-        return OverlapRatio(e.StartDate, end, month) > 0 ? e.Fee : 0;
+        return OverlapRatio(e.StartDate, end, month) > 0 ? fee : 0;
     }
 
     public static AssignmentMonthCost AssignmentCost(

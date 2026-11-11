@@ -104,17 +104,16 @@ public sealed class InvoiceWorker(IServiceScopeFactory scopes, ILogger<InvoiceWo
             .Where(i => i.Status == InvoiceStatus.Pending && i.Attempts < MaxAttempts)
             .OrderBy(i => i.CreatedAt).Take(20).ToListAsync(ct);
 
-        var vatRate = decimal.TryParse(config.Setting("vatRate", "10"), System.Globalization.CultureInfo.InvariantCulture, out var v) ? v : 10m;
+        // Same values as the manual invoice template (Ödeme takibi → Fatura ayarları).
+        var settings = await db.BillingSettings.AsNoTracking().FirstOrDefaultAsync(ct) ?? new BillingSettings();
         foreach (var invoice in pending)
         {
             var payment = invoice.Payment;
-            var enrollment = payment.Enrollment;
-            var net = Math.Round(payment.Amount / (1 + vatRate / 100m), 2);
+            var draft = Billing.Draft(payment, settings, DateOnly.FromDateTime(DateTime.UtcNow));
             var doc = new EInvoiceDocument(
-                invoice.Id, DateTime.UtcNow, enrollment.ParentName, enrollment.ParentEmail,
-                BuyerTaxId: "11111111111", // e-Arşiv default for individuals without TCKN
-                [new EInvoiceLine($"{enrollment.Program.Title} - {enrollment.ChildName}", 1, net, vatRate)],
-                payment.Amount);
+                invoice.Id, DateTime.UtcNow, draft.Buyer.Name, draft.Buyer.Email, draft.Buyer.TaxId,
+                [new EInvoiceLine(draft.ItemName, draft.Quantity, draft.UnitPrice, draft.VatRate)],
+                draft.Total);
 
             invoice.Provider = provider.Name;
             invoice.Attempts++;
@@ -125,6 +124,10 @@ public sealed class InvoiceWorker(IServiceScopeFactory scopes, ILogger<InvoiceWo
                 invoice.Number = result.Number;
                 invoice.ExternalId = result.ExternalId;
                 invoice.SentAt = DateTime.UtcNow;
+                invoice.IssuedOn = draft.IssueDate;
+                invoice.VatRate = draft.VatRate;
+                invoice.NetAmount = draft.UnitPrice * draft.Quantity;
+                invoice.VatAmount = draft.VatAmount;
                 invoice.Error = "";
             }
             else

@@ -20,9 +20,16 @@ public class TokenService(Microsoft.Extensions.Options.IOptions<JwtOptions> opti
 {
     private readonly JwtOptions _o = options.Value;
 
-    public (string Token, DateTime ExpiresAt) Create(User user)
+    /// <summary>Access tokens of app sessions are short-lived: the app renews them with its refresh token.</summary>
+    public static readonly TimeSpan SessionAccessLifetime = TimeSpan.FromHours(1);
+
+    /// <summary>
+    /// Access token. With <paramref name="sessionId"/> (mobile app) it carries the session ("sid") and lives one hour;
+    /// otherwise (web panel) <see cref="JwtOptions.ExpiryHours"/>.
+    /// </summary>
+    public (string Token, DateTime ExpiresAt) Create(User user, Guid? sessionId = null)
     {
-        var expires = DateTime.UtcNow.AddHours(_o.ExpiryHours);
+        var expires = sessionId is null ? DateTime.UtcNow.AddHours(_o.ExpiryHours) : DateTime.UtcNow.Add(SessionAccessLifetime);
         var claims = new List<Claim>
         {
             new(JwtRegisteredClaimNames.Sub, user.Id.ToString()),
@@ -30,6 +37,7 @@ public class TokenService(Microsoft.Extensions.Options.IOptions<JwtOptions> opti
             new("name", user.FullName),
             new(AuthSetup.KindClaim, user.Kind.ToString()),
         };
+        if (sessionId is { } sid) claims.Add(new Claim(AuthSetup.SessionClaim, sid.ToString()));
         // Guardians never get a role or panel permissions (also enforced on every request below).
         if (user.Kind == UserKind.Staff && user.Role is { } role)
         {
@@ -49,6 +57,8 @@ public static class AuthSetup
     public const string PermissionClaim = "perm";
     /// <summary>"Staff" or "Guardian".</summary>
     public const string KindClaim = "kind";
+    /// <summary>App session (refresh token) the access token was issued for.</summary>
+    public const string SessionClaim = "sid";
 
     public static SymmetricSecurityKey SigningKey(string key) => new(Encoding.UTF8.GetBytes(key));
 
@@ -99,6 +109,13 @@ public static class AuthSetup
                             ctx.Fail("User inactive or deleted.");
                             return;
                         }
+                        // A signed-out (or revoked) app session stops working at once, not when its token expires.
+                        if (Guid.TryParse(ctx.Principal!.FindFirstValue(SessionClaim), out var sid) &&
+                            !await db.UserSessions.AnyAsync(s => s.Id == sid && s.RevokedAt == null && s.ExpiresAt > DateTime.UtcNow))
+                        {
+                            ctx.Fail("Session ended.");
+                            return;
+                        }
                         var claims = ctx.Principal!.Claims.Where(c => c.Type is not (PermissionClaim or "role" or KindClaim)).ToList();
                         claims.Add(new Claim(KindClaim, user.Kind.ToString()));
                         if (user.Kind == UserKind.Staff && user.RoleName is not null)
@@ -122,6 +139,7 @@ public static class AuthSetup
             o.AddPolicy(Permissions.Classroom, p => p.RequireAssertion(ctx => ctx.User.HasClaim(c =>
                 c.Type == PermissionClaim && c.Value is Permissions.ClassroomUse or Permissions.ProgramsWrite)));
             o.AddPolicy(Permissions.Guardian, p => p.RequireClaim(KindClaim, nameof(UserKind.Guardian)));
+            o.AddPolicy(Permissions.Staff, p => p.RequireClaim(KindClaim, nameof(UserKind.Staff)));
             o.AddPolicy(Permissions.PrivateUpload, p => p.RequireAssertion(ctx => ctx.User.HasClaim(c =>
                 c.Type == PermissionClaim &&
                 c.Value is Permissions.FeedManage or Permissions.ClassroomUse or Permissions.ProgramsWrite)));
@@ -138,4 +156,8 @@ public static class AuthSetup
 
     public static Guid? UserId(this ClaimsPrincipal user) =>
         Guid.TryParse(user.FindFirstValue(JwtRegisteredClaimNames.Sub), out var id) ? id : null;
+
+    /// <summary>App session of the request (mobile app); null for the web panel.</summary>
+    public static Guid? SessionId(this ClaimsPrincipal user) =>
+        Guid.TryParse(user.FindFirstValue(SessionClaim), out var id) ? id : null;
 }

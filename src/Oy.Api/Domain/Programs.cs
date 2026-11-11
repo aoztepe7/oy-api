@@ -23,6 +23,8 @@ public class TrainingProgram : Entity
     /// <summary>Whether the site shows the pre-registration form (otherwise a contact box).</summary>
     public bool EnrollmentEnabled { get; set; } = true;
     public EnrollmentFormConfig EnrollmentForm { get; set; } = new();
+    /// <summary>Registration form sent to the parent after the pre-registration is approved; no questions = none.</summary>
+    public RegistrationFormConfig RegistrationForm { get; set; } = new();
     public string Summary { get; set; } = "";
     public string Description { get; set; } = "";
     public string CoverImageUrl { get; set; } = "";

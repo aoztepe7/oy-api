@@ -16,3 +16,8 @@ TestResults/
 # Local settings / secrets
 .env
 appsettings.*.local.json
+
+# Firebase server (service account) key: secret, never commit
+*firebase-adminsdk*.json
+firebase-server-key.json
+*.p8

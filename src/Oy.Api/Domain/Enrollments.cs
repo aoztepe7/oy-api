@@ -18,7 +18,15 @@ public class Enrollment : Entity
     /// <summary>Answers to the program's custom pre-registration questions.</summary>
     public List<EnrollmentAnswer> Answers { get; set; } = [];
 
+    /// <summary>Invoice recipient; null = not given (invoices go to the parent's name).</summary>
+    public BillingInfo? Billing { get; set; }
+
+    /// <summary>Registration form link sent to the parent (esas kayıt formu).</summary>
+    public RegistrationRequest? Registration { get; set; }
+
     public List<Payment> Payments { get; set; } = [];
+    /// <summary>Single instalments with a manual amount or due date.</summary>
+    public List<DueAdjustment> DueAdjustments { get; set; } = [];
 
     public bool CountsAsRevenue => Status is EnrollmentStatus.Active or EnrollmentStatus.Completed;
 }
@@ -28,6 +36,8 @@ public class Payment : Entity
     public Guid EnrollmentId { get; set; }
     public Enrollment Enrollment { get; set; } = null!;
     public decimal Amount { get; set; }
+    /// <summary>The instalment paid: 1st of the month (monthly fee) or of the start month (one-time fee); null = unassigned.</summary>
+    public DateOnly? Period { get; set; }
     public PaymentMethod Method { get; set; }
     public DateTime PaidAt { get; set; }
     public string Note { get; set; } = "";
@@ -46,4 +56,10 @@ public class Invoice : Entity
     public string Error { get; set; } = "";
     public int Attempts { get; set; }
     public DateTime? SentAt { get; set; }
+    /// <summary>Invoice date (manual invoices: as entered).</summary>
+    public DateOnly? IssuedOn { get; set; }
+    /// <summary>Amounts the invoice was made with (VAT-inclusive total = net + VAT).</summary>
+    public decimal VatRate { get; set; }
+    public decimal NetAmount { get; set; }
+    public decimal VatAmount { get; set; }
 }

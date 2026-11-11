@@ -9,6 +9,7 @@ using Microsoft.Extensions.Options;
 using Oy.Api.Data;
 using Oy.Api.Domain;
 using Oy.Api.Features.Auth;
+using Oy.Api.Features.Billing;
 using Oy.Api.Features.Classroom;
 using Oy.Api.Features.Content;
 using Oy.Api.Features.Enrollments;
@@ -17,8 +18,10 @@ using Oy.Api.Features.Finance;
 using Oy.Api.Features.Guardians;
 using Oy.Api.Features.Programs;
 using Oy.Api.Features.Public;
+using Oy.Api.Features.Registrations;
 using Oy.Api.Features.Settings;
 using Oy.Api.Features.Staff;
+using Oy.Api.Features.Todos;
 using Oy.Api.Features.Users;
 using Oy.Api.Infrastructure;
 using Oy.Api.Infrastructure.Auth;
@@ -73,6 +76,9 @@ builder.Services.AddRateLimiter(o =>
         _ => new FixedWindowRateLimiterOptions { PermitLimit = 10, Window = TimeSpan.FromMinutes(1) }));
     o.AddPolicy("public-forms", ctx => RateLimitPartition.GetFixedWindowLimiter(Ip(ctx),
         _ => new FixedWindowRateLimiterOptions { PermitLimit = 5, Window = TimeSpan.FromMinutes(1) }));
+    // Registration forms are long; a parent may need a few tries to get every answer right.
+    o.AddPolicy("registration-forms", ctx => RateLimitPartition.GetFixedWindowLimiter(Ip(ctx),
+        _ => new FixedWindowRateLimiterOptions { PermitLimit = 20, Window = TimeSpan.FromMinutes(1) }));
 });
 
 builder.Services.Configure<ForwardedHeadersOptions>(o =>
@@ -154,6 +160,7 @@ app.MapScalarApiReference("/docs");
 app.MapHealthChecks("/health");
 
 app.MapPublic();
+app.MapRegistrations();
 app.MapAuth();
 app.MapDashboard();
 app.MapUsers();
@@ -170,6 +177,8 @@ app.MapMediaLibrary();
 app.MapGuardian();
 app.MapFeed();
 app.MapFinance();
+app.MapBilling();
+app.MapTodos();
 app.MapContent();
 app.MapPages();
 app.MapPreviews();

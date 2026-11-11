@@ -175,7 +175,7 @@ public static class DashboardEndpoints
                 var monthEnd = FinanceCalculator.MonthEnd(today);
                 var programs = await db.Programs.AsNoTracking()
                     .Where(p => p.StartDate <= monthEnd && p.EndDate >= monthStart)
-                    .Include(p => p.Enrollments).Include(p => p.Sessions)
+                    .Include(p => p.Enrollments).ThenInclude(e => e.DueAdjustments).Include(p => p.Sessions)
                     .Include(p => p.Expenses.Where(e => e.Date >= monthStart && e.Date <= monthEnd))
                     .Include(p => p.Assignments).ThenInclude(a => a.Staff)
                     .AsSplitQuery().ToListAsync();

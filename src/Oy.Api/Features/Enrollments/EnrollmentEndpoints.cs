@@ -29,7 +29,16 @@ public record EnrollmentInput(
 public record EnrollmentDto(
     Guid Id, Guid ProgramId, string ProgramTitle, string ChildName, DateOnly? ChildBirthDate, string ParentName,
     string? ParentPhone, string? ParentEmail, decimal? Fee, PricePeriod FeePeriod, DateOnly StartDate, DateOnly? EndDate,
-    EnrollmentStatus Status, string Note, decimal? PaidTotal, DateTime CreatedAt, List<EnrollmentAnswer> Answers);
+    EnrollmentStatus Status, string Note, decimal? PaidTotal, DateTime CreatedAt, List<EnrollmentAnswer> Answers,
+    /// <summary>Registration form link of the enrollment; null when none was created.</summary>
+    RegistrationDto? Registration,
+    /// <summary>Invoice recipient; null when not given (or without enrollments.contact).</summary>
+    BillingInfo? Billing);
+
+/// <summary>Registration form link (okulumyeryuzu.com/kayit/{Token}) and the answers once submitted.</summary>
+public record RegistrationDto(
+    string Token, RegistrationStatus Status, DateTime IssuedAt, DateTime ExpiresAt, DateTime? OpenedAt, DateTime? SubmittedAt,
+    List<EnrollmentAnswer> Answers);
 
 public static class EnrollmentEndpoints
 {
@@ -57,7 +66,24 @@ public static class EnrollmentEndpoints
         }).RequireAuthorization(Permissions.EnrollmentsWrite);
 
         group.MapPut("/{id:guid}", async (Guid id, EnrollmentInput input, AppDbContext db, UiRevalidator ui, ClaimsPrincipal me) =>
-            await db.Enrollments.FindAsync(id) is { } e ? await SaveAsync(e, input, db, ui, me, isNew: false) : Results.NotFound())
+            await db.Enrollments.Include(x => x.Registration).FirstOrDefaultAsync(x => x.Id == id) is { } e ? await SaveAsync(e, input, db, ui, me, isNew: false) : Results.NotFound())
+            .RequireAuthorization(Permissions.EnrollmentsWrite);
+
+        // Registration form link: create, or renew (new link, open for answers again).
+        group.MapPost("/{id:guid}/registration", async (Guid id, AppDbContext db, ClaimsPrincipal me) =>
+        {
+            var e = await db.Enrollments.Include(x => x.Registration).Include(x => x.Program).FirstOrDefaultAsync(x => x.Id == id);
+            if (e is null) return Results.NotFound();
+            if (!RegistrationLinks.HasForm(e.Program))
+                return ApiResults.Conflict("Bu eğitimin esas kayıt formu yok. Önce eğitim ayarlarından form sorularını ekleyin.");
+            if (e.Registration is null) db.Registrations.Add(RegistrationLinks.Issue(null, e.Id, e.Program, DateTime.UtcNow));
+            else RegistrationLinks.Issue(e.Registration, e.Id, e.Program, DateTime.UtcNow);
+            await db.SaveChangesAsync();
+            return Results.Ok(Shape(await Project(db.Enrollments.AsNoTracking().Where(x => x.Id == id)).FirstAsync(), me));
+        }).RequireAuthorization(Permissions.EnrollmentsWrite);
+
+        group.MapDelete("/{id:guid}/registration", async (Guid id, AppDbContext db) =>
+            await db.Registrations.Where(r => r.EnrollmentId == id).ExecuteDeleteAsync() == 0 ? Results.NotFound() : Results.NoContent())
             .RequireAuthorization(Permissions.EnrollmentsWrite);
 
         group.MapDelete("/{id:guid}", async (Guid id, AppDbContext db, UiRevalidator ui) =>
@@ -76,9 +102,14 @@ public static class EnrollmentEndpoints
     {
         var contact = me.Can(Permissions.EnrollmentsContact);
         var fees = me.Can(Permissions.EnrollmentsFees);
+        var now = DateTime.UtcNow;
         return e with
         {
+            Registration = e.Registration is { } r
+                ? r with { Status = RegistrationLinks.Status(r.SubmittedAt, r.OpenedAt, r.ExpiresAt, now) }
+                : null,
             ParentPhone = contact ? e.ParentPhone : null,
+            Billing = contact ? e.Billing : null,
             ParentEmail = contact ? e.ParentEmail : null,
             Fee = fees ? e.Fee : null,
             PaidTotal = fees ? e.PaidTotal : null,
@@ -129,6 +160,9 @@ public static class EnrollmentEndpoints
         e.Status = input.Status;
         e.Note = input.Note?.Trim() ?? "";
         if (isNew) db.Enrollments.Add(e);
+        // Approving (or adding an active enrollment) creates the registration form link to send to the parent.
+        if (e.Status == EnrollmentStatus.Active && e.Registration is null && RegistrationLinks.HasForm(program!))
+            e.Registration = RegistrationLinks.Issue(null, e.Id, program!, DateTime.UtcNow);
         await db.SaveChangesAsync();
         await ui.RevalidateAsync(CacheTags.Programs); // remaining seats changed
 
@@ -138,5 +172,9 @@ public static class EnrollmentEndpoints
 
     private static IQueryable<EnrollmentDto> Project(IQueryable<Enrollment> q) => q.Select(e => new EnrollmentDto(
         e.Id, e.ProgramId, e.Program.Title, e.ChildName, e.ChildBirthDate, e.ParentName, e.ParentPhone, e.ParentEmail,
-        e.Fee, e.FeePeriod, e.StartDate, e.EndDate, e.Status, e.Note, e.Payments.Sum(p => p.Amount), e.CreatedAt, e.Answers));
+        e.Fee, e.FeePeriod, e.StartDate, e.EndDate, e.Status, e.Note, e.Payments.Sum(p => p.Amount), e.CreatedAt, e.Answers,
+        e.Registration == null ? null : new RegistrationDto(
+            e.Registration.Token, RegistrationStatus.Sent, e.Registration.IssuedAt, e.Registration.ExpiresAt,
+            e.Registration.OpenedAt, e.Registration.SubmittedAt, e.Registration.Answers),
+        e.Billing));
 }

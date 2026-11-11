@@ -112,6 +112,9 @@ public static class Permissions
     /// <summary>Policy name for guardian (veli) logins.</summary>
     public const string Guardian = "guardian";
 
+    /// <summary>Policy name for every panel (non-guardian) login, whatever its role.</summary>
+    public const string Staff = "staff";
+
     /// <summary>Policy name for uploading private files (feed images, lesson photos).</summary>
     public const string PrivateUpload = "private.upload";
 }

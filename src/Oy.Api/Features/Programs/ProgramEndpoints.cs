@@ -30,7 +30,9 @@ public record ProgramInput(
     List<PriceOptionInput>? PriceOptions = null,
     /// <summary>null = leave unchanged (older clients).</summary>
     bool? EnrollmentEnabled = null,
-    EnrollmentFormConfig? EnrollmentForm = null);
+    EnrollmentFormConfig? EnrollmentForm = null,
+    /// <summary>null = leave unchanged (older clients).</summary>
+    RegistrationFormConfig? RegistrationForm = null);
 
 public record PriceOptionInput(
     [MaxLength(100)] string? Label,
@@ -44,7 +46,7 @@ public record ProgramAdminDto(
     /// <summary><c>Price</c> / <c>PriceOptions</c> are null without the programs.pricing permission.</summary>
     int Capacity, decimal? Price, PricePeriod PricePeriod, List<PriceOption>? PriceOptions, string Summary, string Description,
     string CoverImageUrl, string Location, bool IsPublished, int? FeaturedOrder,
-    bool EnrollmentEnabled, EnrollmentFormConfig EnrollmentForm,
+    bool EnrollmentEnabled, EnrollmentFormConfig EnrollmentForm, RegistrationFormConfig RegistrationForm,
     int EnrolledCount, int SessionCount, DateTime CreatedAt, DateTime UpdatedAt,
     /// <summary>All enrollments of the program, any status (the "Kayıtlar" tab count).</summary>
     int EnrollmentTotal);
@@ -286,6 +288,15 @@ public static class ProgramEndpoints
             .Check(options.Count == 0 || options.Any(o => !o.IsAddon), "priceOptions", "Ek ücretlerin yanında en az bir paket fiyatı girin.");
         var (form, formErrors) = EnrollmentForms.Sanitize(input.EnrollmentForm ?? p.EnrollmentForm);
         foreach (var (field, message) in formErrors) errors.Check(false, field, message);
+        var registrationErrors = new List<(string, string)>();
+        var registrationInput = input.RegistrationForm ?? p.RegistrationForm;
+        var intro = (registrationInput.Intro ?? "").Trim();
+        var registration = new RegistrationFormConfig
+        {
+            Intro = intro.Length > 2000 ? intro[..2000] : intro,
+            Questions = EnrollmentForms.SanitizeQuestions(registrationInput.Questions, "registrationForm", perChild: false, registrationErrors),
+        };
+        foreach (var (field, message) in registrationErrors) errors.Check(false, field, message);
         if (errors.Any) return errors.ToResult();
         if (await db.Programs.AnyAsync(x => x.Slug == slug && x.Id != p.Id))
             return new Errors().Check(false, "slug", "Bu adres başka bir eğitimde kullanılıyor.").ToResult();
@@ -315,6 +326,7 @@ public static class ProgramEndpoints
         p.IsPublished = input.IsPublished;
         p.EnrollmentEnabled = input.EnrollmentEnabled ?? p.EnrollmentEnabled;
         p.EnrollmentForm = form;
+        p.RegistrationForm = registration;
 
         if (isNew) db.Programs.Add(p);
         SyncSessions(p, db);
@@ -358,7 +370,7 @@ public static class ProgramEndpoints
         query.Select(p => new ProgramAdminDto(
             p.Id, p.Title, p.Slug, p.Type, p.AgeMin, p.AgeMax, p.StartDate, p.EndDate, p.DaysOfWeek,
             p.StartTime, p.EndTime, p.Capacity, p.Price, p.PricePeriod, p.PriceOptions, p.Summary, p.Description,
-            p.CoverImageUrl, p.Location, p.IsPublished, p.FeaturedOrder, p.EnrollmentEnabled, p.EnrollmentForm,
+            p.CoverImageUrl, p.Location, p.IsPublished, p.FeaturedOrder, p.EnrollmentEnabled, p.EnrollmentForm, p.RegistrationForm,
             p.Enrollments.Count(e => e.Status == EnrollmentStatus.Active),
             p.Sessions.Count, p.CreatedAt, p.UpdatedAt, p.Enrollments.Count));
 }

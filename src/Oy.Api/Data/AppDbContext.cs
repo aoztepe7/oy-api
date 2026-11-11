@@ -15,6 +15,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<Staff> Staff => Set<Staff>();
     public DbSet<StaffAssignment> Assignments => Set<StaffAssignment>();
     public DbSet<Enrollment> Enrollments => Set<Enrollment>();
+    public DbSet<RegistrationRequest> Registrations => Set<RegistrationRequest>();
     public DbSet<Payment> Payments => Set<Payment>();
     public DbSet<Invoice> Invoices => Set<Invoice>();
     public DbSet<Page> Pages => Set<Page>();
@@ -23,6 +24,14 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<SpecialDay> SpecialDays => Set<SpecialDay>();
     public DbSet<ContactMessage> ContactMessages => Set<ContactMessage>();
     public DbSet<IntegrationConfig> Integrations => Set<IntegrationConfig>();
+    public DbSet<BillingSettings> BillingSettings => Set<BillingSettings>();
+    public DbSet<Obligation> Obligations => Set<Obligation>();
+    public DbSet<DueAdjustment> DueAdjustments => Set<DueAdjustment>();
+    public DbSet<TodoItem> Todos => Set<TodoItem>();
+    public DbSet<UserSession> UserSessions => Set<UserSession>();
+    public DbSet<TodoAssignee> TodoAssignees => Set<TodoAssignee>();
+    public DbSet<TodoComment> TodoComments => Set<TodoComment>();
+    public DbSet<ObligationPayment> ObligationPayments => Set<ObligationPayment>();
     public DbSet<Attendance> Attendance => Set<Attendance>();
     public DbSet<ObservationNote> ObservationNotes => Set<ObservationNote>();
     public DbSet<GuardianLink> GuardianLinks => Set<GuardianLink>();
@@ -48,6 +57,11 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
         b.Properties<AttendanceStatus>().HaveConversion<string>().HaveMaxLength(32);
         b.Properties<UserKind>().HaveConversion<string>().HaveMaxLength(32);
         b.Properties<GuardianRelation>().HaveConversion<string>().HaveMaxLength(32);
+        b.Properties<ObligationCategory>().HaveConversion<string>().HaveMaxLength(32);
+        b.Properties<TodoVisibility>().HaveConversion<string>().HaveMaxLength(32);
+        b.Properties<TodoPriority>().HaveConversion<string>().HaveMaxLength(32);
+        b.Properties<TodoRepeat>().HaveConversion<string>().HaveMaxLength(32);
+        b.Properties<DevicePlatform>().HaveConversion<string>().HaveMaxLength(32);
         b.Properties<decimal>().HavePrecision(14, 2);
     }
 
@@ -70,6 +84,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             e.HasIndex(x => new { x.IsPublished, x.EndDate });
             Json(e.Property(x => x.PriceOptions));
             Json(e.Property(x => x.EnrollmentForm));
+            Json(e.Property(x => x.RegistrationForm));
         });
         b.Entity<Session>(e =>
         {
@@ -83,6 +98,18 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
         b.Entity<Enrollment>(e =>
         {
             e.HasIndex(x => new { x.ProgramId, x.Status });
+            Json(e.Property(x => x.Answers));
+            Json(e.Property(x => x.Billing));
+        });
+        b.Entity<RegistrationRequest>(e =>
+        {
+            e.Property(x => x.Token).HasMaxLength(64);
+            e.HasIndex(x => x.Token).IsUnique();
+            e.HasIndex(x => x.EnrollmentId).IsUnique();
+            e.HasOne(x => x.Enrollment).WithOne(x => x.Registration).HasForeignKey<RegistrationRequest>(x => x.EnrollmentId)
+                .OnDelete(DeleteBehavior.Cascade);
+            Json(e.Property(x => x.Questions));
+            Json(e.Property(x => x.Values));
             Json(e.Property(x => x.Answers));
         });
         // Attendance and notes go with their session (and so with a deleted program). Deleting an enrollment
@@ -151,6 +178,64 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
         });
         b.Entity<Payment>().HasOne(x => x.Invoice).WithOne(x => x.Payment).HasForeignKey<Invoice>(x => x.PaymentId);
         b.Entity<Invoice>().HasIndex(x => x.Status);
+        b.Entity<Payment>().HasIndex(x => new { x.EnrollmentId, x.Period });
+        b.Entity<UserSession>(e =>
+        {
+            e.ToTable("UserSessions");
+            e.Property(x => x.TokenHash).HasMaxLength(64);
+            e.Property(x => x.PreviousTokenHash).HasMaxLength(64);
+            e.Property(x => x.DeviceName).HasMaxLength(100);
+            e.Property(x => x.AppVersion).HasMaxLength(30);
+            e.Property(x => x.PushToken).HasMaxLength(512);
+            e.HasIndex(x => x.TokenHash).IsUnique();
+            e.HasIndex(x => x.PreviousTokenHash);
+            e.HasIndex(x => new { x.UserId, x.RevokedAt });
+            e.HasIndex(x => x.PushToken);
+            e.HasOne(x => x.User).WithMany().OnDelete(DeleteBehavior.Cascade);
+        });
+        b.Entity<TodoItem>(e =>
+        {
+            e.ToTable("Todos");
+            e.Property(x => x.Title).HasMaxLength(200);
+            e.Property(x => x.Notes).HasMaxLength(4000);
+            e.HasIndex(x => new { x.CompletedAt, x.DueDate });
+            e.HasIndex(x => x.CreatedById);
+            // Shared to-dos outlive their creator's account.
+            e.HasOne(x => x.CreatedBy).WithMany().HasForeignKey(x => x.CreatedById).OnDelete(DeleteBehavior.SetNull);
+            e.HasOne(x => x.CompletedBy).WithMany().HasForeignKey(x => x.CompletedById).OnDelete(DeleteBehavior.SetNull);
+        });
+        b.Entity<TodoComment>(e =>
+        {
+            e.Property(x => x.Text).HasMaxLength(2000);
+            e.HasIndex(x => new { x.TodoId, x.CreatedAt });
+            e.HasOne(x => x.Todo).WithMany(x => x.Comments).OnDelete(DeleteBehavior.Cascade);
+            e.HasOne(x => x.Author).WithMany().HasForeignKey(x => x.AuthorId).OnDelete(DeleteBehavior.SetNull);
+        });
+        b.Entity<TodoAssignee>(e =>
+        {
+            e.HasKey(x => new { x.TodoId, x.UserId });
+            e.HasIndex(x => x.UserId);
+            e.HasOne(x => x.Todo).WithMany(x => x.Assignees).OnDelete(DeleteBehavior.Cascade);
+            e.HasOne(x => x.User).WithMany().OnDelete(DeleteBehavior.Cascade);
+        });
+        b.Entity<DueAdjustment>(e =>
+        {
+            e.HasIndex(x => new { x.EnrollmentId, x.Period }).IsUnique();
+            e.HasOne(x => x.Enrollment).WithMany(x => x.DueAdjustments).OnDelete(DeleteBehavior.Cascade);
+            e.Property(x => x.Note).HasMaxLength(500);
+        });
+        b.Entity<Obligation>(e =>
+        {
+            e.Property(x => x.Title).HasMaxLength(200);
+            e.Property(x => x.Note).HasMaxLength(1000);
+            e.HasOne(x => x.Staff).WithMany().OnDelete(DeleteBehavior.SetNull);
+        });
+        b.Entity<ObligationPayment>(e =>
+        {
+            e.HasIndex(x => new { x.ObligationId, x.Month }).IsUnique();
+            e.HasOne(x => x.Obligation).WithMany(x => x.Payments).OnDelete(DeleteBehavior.Cascade);
+            e.Property(x => x.Note).HasMaxLength(500);
+        });
 
         b.Entity<Page>(e =>
         {

@@ -19,7 +19,9 @@ public record ProgramFinanceDto(Guid ProgramId, string Title, IReadOnlyList<Prog
 
 public record FinanceSummaryRow(Guid ProgramId, string Title, ProgramType Type, decimal Revenue, decimal StaffCost, decimal Expenses, decimal Profit, decimal Margin);
 
-public record PaymentInput(Guid EnrollmentId, [Range(0.01, 10_000_000)] decimal Amount, PaymentMethod Method, DateTime? PaidAt, [MaxLength(500)] string? Note);
+public record PaymentInput(Guid EnrollmentId, [Range(0.01, 10_000_000)] decimal Amount, PaymentMethod Method, DateTime? PaidAt, [MaxLength(500)] string? Note,
+    /// <summary>Instalment paid (1st of the month); null = applied to the oldest unpaid instalments.</summary>
+    DateOnly? Period = null);
 
 public record PaymentDto(Guid Id, Guid EnrollmentId, string ChildName, string ProgramTitle, decimal Amount, PaymentMethod Method,
     DateTime PaidAt, string Note, InvoiceStatus? InvoiceStatus, string? InvoiceNumber);
@@ -103,6 +105,7 @@ public static class FinanceEndpoints
             {
                 EnrollmentId = input.EnrollmentId, Amount = input.Amount, Method = input.Method,
                 PaidAt = input.PaidAt?.ToUniversalTime() ?? DateTime.UtcNow, Note = input.Note?.Trim() ?? "",
+                Period = input.Period is { } period ? Domain.Billing.MonthStart(period) : null,
             };
             db.Payments.Add(payment);
             if (await invoices.AutoIssueEnabledAsync(ct)) await invoices.QueueAsync(payment.Id, ct);
@@ -137,7 +140,7 @@ public static class FinanceEndpoints
 
     private static IQueryable<TrainingProgram> LoadForFinance(AppDbContext db) =>
         db.Programs.AsNoTracking()
-            .Include(p => p.Enrollments)
+            .Include(p => p.Enrollments).ThenInclude(e => e.DueAdjustments)
             .Include(p => p.Sessions)
             .Include(p => p.Expenses)
             .Include(p => p.Assignments).ThenInclude(a => a.Staff)
