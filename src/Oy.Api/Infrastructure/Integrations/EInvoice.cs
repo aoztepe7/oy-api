@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Oy.Api.Data;
 using Oy.Api.Domain;
+using Oy.Api.Infrastructure.Push;
 
 namespace Oy.Api.Infrastructure.Integrations;
 
@@ -106,6 +107,7 @@ public sealed class InvoiceWorker(IServiceScopeFactory scopes, ILogger<InvoiceWo
 
         // Same values as the manual invoice template (Ödeme takibi → Fatura ayarları).
         var settings = await db.BillingSettings.AsNoTracking().FirstOrDefaultAsync(ct) ?? new BillingSettings();
+        var sent = new List<Invoice>();
         foreach (var invoice in pending)
         {
             var payment = invoice.Payment;
@@ -129,6 +131,7 @@ public sealed class InvoiceWorker(IServiceScopeFactory scopes, ILogger<InvoiceWo
                 invoice.NetAmount = draft.UnitPrice * draft.Quantity;
                 invoice.VatAmount = draft.VatAmount;
                 invoice.Error = "";
+                sent.Add(invoice);
             }
             else
             {
@@ -138,5 +141,14 @@ public sealed class InvoiceWorker(IServiceScopeFactory scopes, ILogger<InvoiceWo
             }
         }
         await db.SaveChangesAsync(ct);
+
+        var notifier = scope.ServiceProvider.GetRequiredService<Notifier>();
+        foreach (var invoice in sent)
+        {
+            var e = invoice.Payment.Enrollment;
+            await notifier.SendAsync(await notifier.GuardiansOfAsync([e.Id], ct), NotificationKind.InvoiceIssued, "Faturanız kesildi",
+                $"{e.ChildName} · {e.Program.Title}: {ReminderWorker.Money(invoice.Payment.Amount)} ödemenizin faturası kesildi (no: {invoice.Number}).",
+                "/veli/hesap", $"invoice:{invoice.Id}", ct);
+        }
     }
 }

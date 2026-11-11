@@ -5,6 +5,7 @@ using Oy.Api.Data;
 using Oy.Api.Domain;
 using Oy.Api.Infrastructure;
 using Oy.Api.Infrastructure.Auth;
+using Oy.Api.Infrastructure.Push;
 
 namespace Oy.Api.Features.Classroom;
 
@@ -110,7 +111,7 @@ public static class ClassPhotoEndpoints
 
         // Shares every not-yet-shared photo that has at least one child tagged; untagged ones stay as drafts.
         group.MapPost("/sessions/{id:guid}/photos/publish", async (Guid id, ClaimsPrincipal me, AppDbContext db, PrivateFileService files,
-            ClassroomNotifier notify) =>
+            ClassroomNotifier notify, Notifier notifier) =>
         {
             var viewer = await ClassroomEndpoints.ViewerAsync(me, db);
             var s = await ClassroomEndpoints.Visible(db, viewer).AsNoTracking().FirstOrDefaultAsync(x => x.Id == id);
@@ -121,6 +122,20 @@ public static class ClassPhotoEndpoints
             foreach (var d in drafts.Where(d => d.Tagged)) d.Photo.PublishedAt = now;
             await db.SaveChangesAsync();
             await notify.SessionChangedAsync(id, s.Date);
+
+            // Each child's guardians: how many new photos of their child.
+            var published = drafts.Where(d => d.Tagged).Select(d => d.Photo.Id).ToList();
+            if (published.Count > 0)
+            {
+                var program = await db.Programs.Where(p => p.Id == s.ProgramId).Select(p => p.Title).FirstAsync();
+                var perChild = await db.ClassPhotoTags.Where(t => published.Contains(t.PhotoId))
+                    .GroupBy(t => new { t.EnrollmentId, t.Enrollment.ChildName })
+                    .Select(g => new { g.Key.EnrollmentId, g.Key.ChildName, Count = g.Count() }).ToListAsync();
+                foreach (var c in perChild)
+                    await notifier.SendAsync(await notifier.GuardiansOfAsync([c.EnrollmentId]), NotificationKind.Photos,
+                        $"{Notifier.FirstName(c.ChildName)} için yeni fotoğraflar",
+                        $"{program} dersinden {c.Count} fotoğraf paylaşıldı.", "/veli/fotograflar");
+            }
             return Results.Ok(new PublishResult(drafts.Count(d => d.Tagged), drafts.Count(d => !d.Tagged), await BuildAsync(s, viewer, db, files)));
         });
 

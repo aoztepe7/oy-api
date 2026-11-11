@@ -4,6 +4,7 @@ using Microsoft.EntityFrameworkCore;
 using Oy.Api.Data;
 using Oy.Api.Domain;
 using Oy.Api.Infrastructure;
+using Oy.Api.Infrastructure.Push;
 using Oy.Api.Infrastructure.Auth;
 
 namespace Oy.Api.Features.Feed;
@@ -81,21 +82,25 @@ public static class FeedEndpoints
             await ToDtosAsync(await db.FeedPosts.AsNoTracking().Include(p => p.Program)
                 .OrderByDescending(p => p.PublishedAt == null).ThenByDescending(p => p.PublishedAt ?? p.CreatedAt).Take(200).ToListAsync(), db, files));
 
-        feed.MapPost("/", async (FeedPostInput input, ClaimsPrincipal me, AppDbContext db, PrivateFileService files) =>
+        feed.MapPost("/", async (FeedPostInput input, ClaimsPrincipal me, AppDbContext db, PrivateFileService files, Notifier notifier) =>
         {
             var post = new FeedPost { AuthorUserId = me.UserId(), AuthorName = me.FindFirstValue("name") ?? "" };
             if (await ApplyAsync(post, input, db, files) is { } error) return error;
             db.FeedPosts.Add(post);
             await db.SaveChangesAsync();
+            if (post.PublishedAt is not null) await NotifyAsync(post, notifier);
             return Results.Ok(await OneAsync(post.Id, db, files));
         });
 
-        feed.MapPut("/{id:guid}", async (Guid id, FeedPostInput input, AppDbContext db, PrivateFileService files) =>
+        feed.MapPut("/{id:guid}", async (Guid id, FeedPostInput input, AppDbContext db, PrivateFileService files, Notifier notifier) =>
         {
             var post = await db.FeedPosts.FirstOrDefaultAsync(p => p.Id == id);
             if (post is null) return Results.NotFound();
+            var wasPublished = post.PublishedAt is not null;
             if (await ApplyAsync(post, input, db, files) is { } error) return error;
             await db.SaveChangesAsync();
+            // A draft published now (re-publishing an edited post does not notify again).
+            if (!wasPublished && post.PublishedAt is not null) await NotifyAsync(post, notifier);
             return Results.Ok(await OneAsync(id, db, files));
         });
 
@@ -111,6 +116,15 @@ public static class FeedEndpoints
         // The images stay in the "Akış" folder.
         feed.MapDelete("/{id:guid}", async (Guid id, AppDbContext db) =>
             await db.FeedPosts.Where(p => p.Id == id).ExecuteDeleteAsync() > 0 ? Results.NoContent() : Results.NotFound());
+    }
+
+    /// <summary>Guardians who can see the post (all, or those with a child in its program).</summary>
+    private static async Task NotifyAsync(FeedPost post, Notifier notifier)
+    {
+        var text = post.Text.ReplaceLineEndings(" ").Trim();
+        var body = text.Length > 0 ? text : post.ImageIds.Count > 1 ? $"{post.ImageIds.Count} yeni görsel paylaşıldı." : "Yeni bir görsel paylaşıldı.";
+        await notifier.SendAsync(await notifier.GuardiansOfProgramAsync(post.ProgramId), NotificationKind.FeedPost,
+            "Okulum Yeryüzü'nden yeni paylaşım", body, "/veli");
     }
 
     private static async Task<IResult?> ApplyAsync(FeedPost post, FeedPostInput input, AppDbContext db, PrivateFileService files)

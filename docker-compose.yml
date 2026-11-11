@@ -66,6 +66,9 @@ services:
       # Mobile app (Capacitor): iOS and Android web views.
       Cors__Origins__2: capacitor://localhost
       Cors__Origins__3: https://localhost
+      # Push notifications: Firebase service account, copied into the storage volume once:
+      #   docker compose cp firebase-server-key.json oy-api:/app/storage/firebase-server-key.json && docker compose restart oy-api
+      Push__CredentialsPath: /app/storage/firebase-server-key.json
       Seed__AdminEmail: ${ADMIN_EMAIL:?set ADMIN_EMAIL}
       Seed__AdminPassword: ${ADMIN_PASSWORD:?set ADMIN_PASSWORD}
     volumes:

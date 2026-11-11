@@ -7,6 +7,7 @@ using Oy.Api.Features.Content;
 using Oy.Api.Features.Programs;
 using Oy.Api.Infrastructure;
 using Oy.Api.Infrastructure.Auth;
+using Oy.Api.Infrastructure.Push;
 
 namespace Oy.Api.Features.Public;
 
@@ -85,7 +86,7 @@ public static class PublicEndpoints
             return staff.Select(s => new PublicStaff(s.Id, s.FullName, s.Title, s.Bio, media.ToPublic(s.PhotoUrl)));
         });
 
-        group.MapPost("/enrollments", async (PreRegistrationInput input, AppDbContext db) =>
+        group.MapPost("/enrollments", async (PreRegistrationInput input, AppDbContext db, Notifier notifier) =>
         {
             var program = await db.Programs.AsNoTracking().FirstOrDefaultAsync(p => p.Id == input.ProgramId && p.IsPublished);
             if (program is null) return new Errors().Check(false, "programId", "Eğitim bulunamadı.").ToResult();
@@ -134,16 +135,21 @@ public static class PublicEndpoints
             }).ToList();
             db.Enrollments.AddRange(enrollments);
             await db.SaveChangesAsync();
+            await notifier.SendAsync(await notifier.StaffWithAsync(Permissions.EnrollmentsRead), NotificationKind.PreRegistration,
+                $"Yeni ön kayıt: {program.Title}",
+                $"{enrollments[0].ParentName} · {string.Join(", ", children.Select(c => c.Name))}", "/kayitlar?status=Pending");
             return Results.Accepted(value: new { id = enrollments[0].Id, ids = enrollments.Select(e => e.Id) });
         }).RequireRateLimiting("public-forms");
 
-        group.MapPost("/contact", async (ContactInput input, AppDbContext db) =>
+        group.MapPost("/contact", async (ContactInput input, AppDbContext db, Notifier notifier) =>
         {
             db.ContactMessages.Add(new ContactMessage
             {
                 Name = input.Name.Trim(), Email = input.Email.Trim(), Phone = input.Phone?.Trim() ?? "", Message = input.Message.Trim(),
             });
             await db.SaveChangesAsync();
+            await notifier.SendAsync(await notifier.StaffWithAsync(Permissions.EnrollmentsRead), NotificationKind.ContactMessage,
+                $"Yeni mesaj: {input.Name.Trim()}", input.Message.ReplaceLineEndings(" ").Trim(), "/mesajlar");
             return Results.Accepted();
         }).RequireRateLimiting("public-forms");
     }

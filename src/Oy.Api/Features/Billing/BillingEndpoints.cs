@@ -375,14 +375,14 @@ public static class BillingEndpoints
 
     private static DateOnly Today() => DateOnly.FromDateTime(DateTime.UtcNow);
 
-    private static async Task<BillingSettings> SettingsAsync(AppDbContext db, CancellationToken ct) =>
+    internal static async Task<BillingSettings> SettingsAsync(AppDbContext db, CancellationToken ct) =>
         await db.BillingSettings.AsNoTracking().FirstOrDefaultAsync(ct) ?? new BillingSettings();
 
     private static BillingSettingsDto ToDto(BillingSettings s, ResolvedIntegration? integration) => new(
         s.VatRate, s.MonthlyDueDay, s.ReminderDays, s.ItemName, s.Unit, s.Note, s.DefaultTaxId, integration is not null, integration?.Provider);
 
     /// <summary>Instalments of every active (or completed) enrollment, optionally of one program.</summary>
-    private static async Task<List<DueDto>> DuesAsync(AppDbContext db, BillingSettings settings, Guid? programId, CancellationToken ct)
+    internal static async Task<List<DueDto>> DuesAsync(AppDbContext db, BillingSettings settings, Guid? programId, CancellationToken ct)
     {
         var query = db.Enrollments.AsNoTracking()
             .Where(e => (e.Status == EnrollmentStatus.Active || e.Status == EnrollmentStatus.Completed) && (e.Fee > 0 || e.DueAdjustments.Any()));
@@ -416,7 +416,7 @@ public static class BillingEndpoints
     }
 
     /// <summary>Months of active obligations in [start, end], plus earlier unpaid months (overdue, at most 3 years back).</summary>
-    private static async Task<List<ObligationDueDto>> ObligationScheduleAsync(
+    internal static async Task<List<ObligationDueDto>> ObligationScheduleAsync(
         AppDbContext db, BillingSettings settings, DateOnly start, DateOnly end, CancellationToken ct)
     {
         var obligations = await db.Obligations.AsNoTracking().Where(o => o.IsActive).Include(o => o.Payments).ToListAsync(ct);

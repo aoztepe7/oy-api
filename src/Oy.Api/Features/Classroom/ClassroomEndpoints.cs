@@ -340,5 +340,8 @@ public static class ClassroomEndpoints
     }
 
     /// <summary>Today in Turkey: lessons are planned in local dates, so "today" must not flip at 03:00.</summary>
-    public static DateOnly Today() => DateOnly.FromDateTime(TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, Turkey));
+    public static DateOnly Today() => DateOnly.FromDateTime(LocalNow());
+
+    /// <summary>Wall-clock time in Turkey.</summary>
+    public static DateTime LocalNow() => TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, Turkey);
 }

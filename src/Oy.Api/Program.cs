@@ -16,6 +16,7 @@ using Oy.Api.Features.Enrollments;
 using Oy.Api.Features.Feed;
 using Oy.Api.Features.Finance;
 using Oy.Api.Features.Guardians;
+using Oy.Api.Features.Notifications;
 using Oy.Api.Features.Programs;
 using Oy.Api.Features.Public;
 using Oy.Api.Features.Registrations;
@@ -27,6 +28,7 @@ using Oy.Api.Infrastructure;
 using Oy.Api.Infrastructure.Auth;
 using Oy.Api.Infrastructure.Integrations;
 using Oy.Api.Infrastructure.Logging;
+using Oy.Api.Infrastructure.Push;
 using Scalar.AspNetCore;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -114,6 +116,16 @@ builder.Services.AddSignalR().AddJsonProtocol(o =>
     o.PayloadSerializerOptions.Converters.Add(new JsonStringEnumConverter()));
 builder.Services.AddSingleton<ClassroomNotifier>();
 
+// Notifications: inbox + push to the app (Firebase). Push:CredentialsPath / Push:Credentials = service account.
+builder.Services.Configure<PushOptions>(config.GetSection("Push"));
+builder.Services.AddHttpClient(nameof(FcmSender), c => c.Timeout = TimeSpan.FromSeconds(15));
+builder.Services.AddSingleton(sp => ActivatorUtilities.CreateInstance<FcmSender>(sp,
+    sp.GetRequiredService<IHttpClientFactory>().CreateClient(nameof(FcmSender))));
+builder.Services.AddSingleton<PushQueue>();
+builder.Services.AddScoped<Notifier>();
+builder.Services.AddHostedService<PushWorker>();
+builder.Services.AddHostedService<ReminderWorker>();
+
 // Private files (children's photos, feed images): signed links only, never static.
 builder.Services.Configure<PrivateFileOptions>(config.GetSection("PrivateFiles"));
 builder.Services.AddSingleton<PrivateFileService>();
@@ -179,6 +191,7 @@ app.MapFeed();
 app.MapFinance();
 app.MapBilling();
 app.MapTodos();
+app.MapNotifications();
 app.MapContent();
 app.MapPages();
 app.MapPreviews();

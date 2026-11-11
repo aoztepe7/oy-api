@@ -5,6 +5,7 @@ using Oy.Api.Data;
 using Oy.Api.Domain;
 using Oy.Api.Infrastructure;
 using Oy.Api.Infrastructure.Auth;
+using Oy.Api.Infrastructure.Push;
 
 namespace Oy.Api.Features.Guardians;
 
@@ -84,13 +85,20 @@ public static class ChildPhotoEndpoints
         });
 
         // Shares every draft photo added to this child outside lessons.
-        group.MapPost("/enrollments/{id:guid}/photos/publish", async (Guid id, AppDbContext db) =>
+        group.MapPost("/enrollments/{id:guid}/photos/publish", async (Guid id, AppDbContext db, Notifier notifier) =>
         {
             var drafts = await db.ClassPhotos.Where(p => p.SessionId == null && p.PublishedAt == null && p.Tags.Any(t => t.EnrollmentId == id))
                 .ToListAsync();
             var now = DateTime.UtcNow;
             foreach (var p in drafts) p.PublishedAt = now;
             await db.SaveChangesAsync();
+            if (drafts.Count > 0)
+            {
+                var child = await db.Enrollments.Where(e => e.Id == id).Select(e => e.ChildName).FirstAsync();
+                await notifier.SendAsync(await notifier.GuardiansOfAsync([id]), NotificationKind.Photos,
+                    $"{Notifier.FirstName(child)} için yeni fotoğraflar",
+                    drafts.Count == 1 ? "Yeni bir fotoğraf paylaşıldı." : $"{drafts.Count} fotoğraf paylaşıldı.", "/veli/fotograflar");
+            }
             return Results.Ok(new { published = drafts.Count });
         });
 

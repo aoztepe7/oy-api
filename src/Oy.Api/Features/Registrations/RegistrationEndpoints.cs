@@ -1,6 +1,8 @@
 using Microsoft.EntityFrameworkCore;
 using Oy.Api.Data;
 using Oy.Api.Domain;
+using Oy.Api.Infrastructure.Auth;
+using Oy.Api.Infrastructure.Push;
 
 namespace Oy.Api.Features.Registrations;
 
@@ -42,7 +44,7 @@ public static class RegistrationEndpoints
             return Results.NoContent();
         }).RequireRateLimiting("registration-forms");
 
-        group.MapPost("/{token}", async (string token, RegistrationSubmission input, AppDbContext db) =>
+        group.MapPost("/{token}", async (string token, RegistrationSubmission input, AppDbContext db, Notifier notifier) =>
         {
             var r = await Find(db.Registrations, token);
             if (r is null) return Results.NotFound();
@@ -65,6 +67,8 @@ public static class RegistrationEndpoints
             r.SubmittedAt = now;
             r.OpenedAt ??= now;
             await db.SaveChangesAsync();
+            await notifier.SendAsync(await notifier.StaffWithAsync(Permissions.EnrollmentsRead), NotificationKind.RegistrationSubmitted,
+                "Esas kayıt formu dolduruldu", $"{r.Enrollment.ChildName} · {r.Enrollment.Program.Title}", "/kayitlar?form=Submitted");
             return Results.Accepted();
         }).RequireRateLimiting("registration-forms");
     }

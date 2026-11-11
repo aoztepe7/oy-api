@@ -29,6 +29,8 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<DueAdjustment> DueAdjustments => Set<DueAdjustment>();
     public DbSet<TodoItem> Todos => Set<TodoItem>();
     public DbSet<UserSession> UserSessions => Set<UserSession>();
+    public DbSet<Notification> Notifications => Set<Notification>();
+    public DbSet<NotificationMute> NotificationMutes => Set<NotificationMute>();
     public DbSet<TodoAssignee> TodoAssignees => Set<TodoAssignee>();
     public DbSet<TodoComment> TodoComments => Set<TodoComment>();
     public DbSet<ObligationPayment> ObligationPayments => Set<ObligationPayment>();
@@ -192,6 +194,22 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             e.HasIndex(x => new { x.UserId, x.RevokedAt });
             e.HasIndex(x => x.PushToken);
             e.HasOne(x => x.User).WithMany().OnDelete(DeleteBehavior.Cascade);
+        });
+        b.Entity<Notification>(e =>
+        {
+            e.Property(x => x.Title).HasMaxLength(120);
+            e.Property(x => x.Body).HasMaxLength(500);
+            e.Property(x => x.Url).HasMaxLength(300);
+            e.Property(x => x.Key).HasMaxLength(200);
+            e.HasIndex(x => new { x.UserId, x.CreatedAt });
+            e.HasIndex(x => new { x.UserId, x.ReadAt });
+            e.HasIndex(x => new { x.UserId, x.Key });
+            e.HasOne(x => x.User).WithMany().OnDelete(DeleteBehavior.Cascade);
+        });
+        b.Entity<NotificationMute>(e =>
+        {
+            e.HasKey(x => new { x.UserId, x.Kind });
+            e.HasOne<User>().WithMany().HasForeignKey(x => x.UserId).OnDelete(DeleteBehavior.Cascade);
         });
         b.Entity<TodoItem>(e =>
         {
