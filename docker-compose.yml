@@ -69,6 +69,15 @@ services:
       # Push notifications: Firebase service account, copied into the storage volume once:
       #   docker compose cp firebase-server-key.json oy-api:/app/storage/firebase-server-key.json && docker compose restart oy-api
       Push__CredentialsPath: /app/storage/firebase-server-key.json
+      # Media storage: DigitalOcean Spaces when SPACES_BUCKET/keys are set (RunarTech panel → Ortam değişkenleri),
+      # otherwise the storage volume. Run `dotnet Oy.Api.dll storage-sync` once before switching.
+      Storage__Spaces__Endpoint: ${SPACES_ENDPOINT:-https://fra1.digitaloceanspaces.com}
+      Storage__Spaces__Region: ${SPACES_REGION:-fra1}
+      Storage__Spaces__Bucket: ${SPACES_BUCKET:-}
+      Storage__Spaces__AccessKey: ${SPACES_ACCESS_KEY:-}
+      Storage__Spaces__SecretKey: ${SPACES_SECRET_KEY:-}
+      Storage__Spaces__PublicBaseUrl: ${SPACES_PUBLIC_BASE_URL:-}
+      Storage__Spaces__Prefix: ${SPACES_PREFIX:-}
       Seed__AdminEmail: ${ADMIN_EMAIL:?set ADMIN_EMAIL}
       Seed__AdminPassword: ${ADMIN_PASSWORD:?set ADMIN_PASSWORD}
     volumes:
