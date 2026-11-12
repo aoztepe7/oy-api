@@ -52,11 +52,11 @@ ON CONFLICT DO NOTHING;
 INSERT INTO "Enrollments" ("Id","ProgramId","ChildName","ChildBirthDate","ParentName","ParentPhone","ParentEmail","Answers","Note",
   "Status","Fee","FeePeriod","StartDate","EndDate","CreatedAt","UpdatedAt")
 VALUES
-  ('d3a00000-0000-4000-8000-000000000011','d3a00000-0000-4000-8000-000000000001','Deniz Demo',make_date(extract(year from current_date)::int - 6, 4, 12),'Demo Veli','','demo.veli@okulumyeryuzu.com','{}','',
+  ('d3a00000-0000-4000-8000-000000000011','d3a00000-0000-4000-8000-000000000001','Deniz Demo',make_date(extract(year from current_date)::int - 6, 4, 12),'Demo Veli','','demo.veli@okulumyeryuzu.com','[]','',
     'Active',0,'Monthly',current_date - 14,NULL,now(),now()),
-  ('d3a00000-0000-4000-8000-000000000012','d3a00000-0000-4000-8000-000000000001','Ege Demo',make_date(extract(year from current_date)::int - 7, 9, 3),'Demo Aile','','','{}','',
+  ('d3a00000-0000-4000-8000-000000000012','d3a00000-0000-4000-8000-000000000001','Ege Demo',make_date(extract(year from current_date)::int - 7, 9, 3),'Demo Aile','','','[]','',
     'Active',0,'Monthly',current_date - 14,NULL,now(),now()),
-  ('d3a00000-0000-4000-8000-000000000013','d3a00000-0000-4000-8000-000000000001','Lina Demo',make_date(extract(year from current_date)::int - 5, 1, 25),'Demo Aile 2','','','{}','',
+  ('d3a00000-0000-4000-8000-000000000013','d3a00000-0000-4000-8000-000000000001','Lina Demo',make_date(extract(year from current_date)::int - 5, 1, 25),'Demo Aile 2','','','[]','',
     'Active',0,'Monthly',current_date - 14,NULL,now(),now())
 ON CONFLICT DO NOTHING;
 
