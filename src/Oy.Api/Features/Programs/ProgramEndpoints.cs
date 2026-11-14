@@ -361,7 +361,11 @@ public static class ProgramEndpoints
             }
             else
             {
-                p.Sessions.Add(new Session { ProgramId = p.Id, Date = date, StartTime = p.StartTime, EndTime = p.EndTime });
+                // Added through the DbSet too: Ids are preset (Guid v7), so a session found only through the
+                // navigation of an already tracked program would be taken as existing and UPDATEd (0 rows → 500).
+                var session = new Session { ProgramId = p.Id, Date = date, StartTime = p.StartTime, EndTime = p.EndTime };
+                p.Sessions.Add(session);
+                db.Sessions.Add(session);
             }
         }
     }
