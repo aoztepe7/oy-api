@@ -35,6 +35,8 @@ services:
     configs:
       - source: clickhouse-http-port
         target: /etc/clickhouse-server/config.d/http-port.xml
+      - source: clickhouse-small-disk
+        target: /etc/clickhouse-server/config.d/small-disk.xml
     ulimits:
       nofile: { soft: 262144, hard: 262144 }
     healthcheck:
@@ -102,6 +104,34 @@ configs:
     content: |
       <clickhouse>
         <http_port>3004</http_port>
+      </clickhouse>
+  # ClickHouse's own diagnostic tables have no TTL and filled the small server's disk (trace_log alone
+  # reached ~9 GB). Only our oy_logs tables matter: drop the internal logs, keep query_log for 3 days,
+  # and cap the server log files.
+  clickhouse-small-disk:
+    content: |
+      <clickhouse>
+        <trace_log remove="1"/>
+        <text_log remove="1"/>
+        <metric_log remove="1"/>
+        <asynchronous_metric_log remove="1"/>
+        <part_log remove="1"/>
+        <processors_profile_log remove="1"/>
+        <query_thread_log remove="1"/>
+        <query_views_log remove="1"/>
+        <query_metric_log remove="1"/>
+        <latency_log remove="1"/>
+        <error_log remove="1"/>
+        <session_log remove="1"/>
+        <opentelemetry_span_log remove="1"/>
+        <query_log>
+          <ttl>event_date + INTERVAL 3 DAY DELETE</ttl>
+        </query_log>
+        <logger>
+          <level>warning</level>
+          <size>50M</size>
+          <count>2</count>
+        </logger>
       </clickhouse>
 
 networks:
