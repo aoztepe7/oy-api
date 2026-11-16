@@ -124,6 +124,11 @@ public static class ProgramEndpoints
                 return ApiResults.Conflict("Ödemesi olan bir eğitim silinemez. Yayından kaldırabilirsiniz.");
             if (await db.ObservationNotes.AnyAsync(n => n.ProgramId == id))
                 return ApiResults.Conflict("Gözlem notu yazılmış bir eğitim silinemez. Yayından kaldırabilirsiniz.");
+            if (await db.CommitmentSignatures.AnyAsync(c => c.Enrollment.ProgramId == id && c.SignedAt != null))
+                return ApiResults.Conflict("Velisi taahhütname imzalamış bir eğitim silinemez. Yayından kaldırabilirsiniz.");
+            if (await db.GuardianMeetings.AnyAsync(m => m.Enrollment.ProgramId == id))
+                return ApiResults.Conflict("Veli görüşme notu yazılmış bir eğitim silinemez. Yayından kaldırabilirsiniz.");
+            await db.CommitmentSignatures.Where(c => c.Enrollment.ProgramId == id).ExecuteDeleteAsync();
             var deleted = await db.Programs.Where(p => p.Id == id).ExecuteDeleteAsync();
             if (deleted == 0) return Results.NotFound();
             await ui.RevalidateAsync(CacheTags.Programs);

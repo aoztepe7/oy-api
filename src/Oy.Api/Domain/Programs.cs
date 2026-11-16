@@ -78,6 +78,11 @@ public class Session : Entity
     /// <summary>When the lesson day was closed; attendance and notes are read-only until it is reopened.</summary>
     public DateTime? EndedAt { get; set; }
 
+    /// <summary>The staff's general summary of the lesson; required before the lesson can be completed.</summary>
+    public string Summary { get; set; } = "";
+    public string SummaryByName { get; set; } = "";
+    public DateTime? SummaryUpdatedAt { get; set; }
+
     public List<Attendance> Attendance { get; set; } = [];
     public List<ObservationNote> Notes { get; set; } = [];
 }

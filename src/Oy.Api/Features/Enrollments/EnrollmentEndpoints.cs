@@ -92,6 +92,11 @@ public static class EnrollmentEndpoints
                 return ApiResults.Conflict("Ödemesi olan kayıt silinemez. İptal durumuna alabilirsiniz.");
             if (await db.Attendance.AnyAsync(a => a.EnrollmentId == id) || await db.ObservationNotes.AnyAsync(n => n.EnrollmentId == id))
                 return ApiResults.Conflict("Yoklaması ya da gözlem notu olan kayıt silinemez. İptal durumuna alabilirsiniz.");
+            if (await db.CommitmentSignatures.AnyAsync(c => c.EnrollmentId == id && c.SignedAt != null))
+                return ApiResults.Conflict("Velinin imzaladığı taahhütnamesi olan kayıt silinemez. İptal durumuna alabilirsiniz.");
+            if (await db.GuardianMeetings.AnyAsync(m => m.EnrollmentId == id))
+                return ApiResults.Conflict("Veli görüşme notu olan kayıt silinemez. İptal durumuna alabilirsiniz.");
+            await db.CommitmentSignatures.Where(c => c.EnrollmentId == id).ExecuteDeleteAsync();
             if (await db.Enrollments.Where(e => e.Id == id).ExecuteDeleteAsync() == 0) return Results.NotFound();
             await ui.RevalidateAsync(CacheTags.Programs);
             return Results.NoContent();

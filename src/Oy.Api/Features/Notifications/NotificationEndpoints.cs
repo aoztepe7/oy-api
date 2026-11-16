@@ -85,7 +85,8 @@ public static class NotificationEndpoints
         if (me.FindFirstValue(AuthSetup.KindClaim) == nameof(UserKind.Guardian)) return NotificationKinds.Guardian;
         return NotificationKinds.Staff.Where(k => k switch
         {
-            NotificationKind.PreRegistration or NotificationKind.RegistrationSubmitted or NotificationKind.ContactMessage =>
+            NotificationKind.PreRegistration or NotificationKind.RegistrationSubmitted or NotificationKind.ContactMessage
+                or NotificationKind.CommitmentSigned =>
                 me.Can(Permissions.EnrollmentsRead),
             NotificationKind.PaymentDigest => me.Can(Permissions.FinanceRead),
             _ => true,

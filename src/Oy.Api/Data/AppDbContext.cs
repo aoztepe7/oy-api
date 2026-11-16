@@ -42,6 +42,10 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<ClassPhoto> ClassPhotos => Set<ClassPhoto>();
     public DbSet<ClassPhotoTag> ClassPhotoTags => Set<ClassPhotoTag>();
     public DbSet<MediaAsset> MediaAssets => Set<MediaAsset>();
+    public DbSet<CommitmentTemplate> CommitmentTemplates => Set<CommitmentTemplate>();
+    public DbSet<ProgramCommitment> ProgramCommitments => Set<ProgramCommitment>();
+    public DbSet<CommitmentSignature> CommitmentSignatures => Set<CommitmentSignature>();
+    public DbSet<GuardianMeeting> GuardianMeetings => Set<GuardianMeeting>();
 
     protected override void ConfigureConventions(ModelConfigurationBuilder b)
     {
@@ -64,6 +68,8 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
         b.Properties<TodoPriority>().HaveConversion<string>().HaveMaxLength(32);
         b.Properties<TodoRepeat>().HaveConversion<string>().HaveMaxLength(32);
         b.Properties<DevicePlatform>().HaveConversion<string>().HaveMaxLength(32);
+        b.Properties<CommitmentChannel>().HaveConversion<string>().HaveMaxLength(32);
+        b.Properties<MeetingChannel>().HaveConversion<string>().HaveMaxLength(32);
         b.Properties<decimal>().HavePrecision(14, 2);
     }
 
@@ -137,6 +143,42 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             e.HasIndex(x => new { x.UserId, x.EnrollmentId }).IsUnique();
             e.HasOne(x => x.User).WithMany(x => x.GuardianLinks).OnDelete(DeleteBehavior.Cascade);
             e.HasOne(x => x.Enrollment).WithMany().OnDelete(DeleteBehavior.Cascade);
+        });
+        // Commitments: a template in use by a program, or with signatures, is never removed by a cascade;
+        // signed records survive and block deleting their enrollment (checked by the endpoints).
+        b.Entity<CommitmentTemplate>(e =>
+        {
+            e.Property(x => x.Title).HasMaxLength(CommitmentRules.TitleMax);
+        });
+        b.Entity<ProgramCommitment>(e =>
+        {
+            e.HasKey(x => new { x.ProgramId, x.TemplateId });
+            e.HasOne(x => x.Program).WithMany().OnDelete(DeleteBehavior.Cascade);
+            e.HasOne(x => x.Template).WithMany(x => x.Programs).OnDelete(DeleteBehavior.Cascade);
+        });
+        b.Entity<CommitmentSignature>(e =>
+        {
+            e.Property(x => x.Token).HasMaxLength(64);
+            e.HasIndex(x => x.Token).IsUnique();
+            e.HasIndex(x => new { x.EnrollmentId, x.TemplateId }).IsUnique();
+            e.Property(x => x.SignedTitle).HasMaxLength(CommitmentRules.TitleMax);
+            e.Property(x => x.BodyHash).HasMaxLength(64);
+            e.Property(x => x.SignerName).HasMaxLength(CommitmentRules.SignerNameMax);
+            e.Property(x => x.WitnessName).HasMaxLength(200);
+            e.Property(x => x.IpAddress).HasMaxLength(64);
+            e.Property(x => x.UserAgent).HasMaxLength(500);
+            e.HasOne(x => x.Enrollment).WithMany().OnDelete(DeleteBehavior.Restrict);
+            e.HasOne(x => x.Template).WithMany().OnDelete(DeleteBehavior.Restrict);
+        });
+        // Meeting notes keep their enrollment: an enrollment with notes is not deleted (checked by the endpoint).
+        b.Entity<GuardianMeeting>(e =>
+        {
+            e.Property(x => x.Text).HasMaxLength(MeetingRules.TextMax);
+            e.Property(x => x.With).HasMaxLength(MeetingRules.WithMax);
+            e.Property(x => x.AuthorName).HasMaxLength(200);
+            e.HasIndex(x => new { x.EnrollmentId, x.Date });
+            e.HasIndex(x => x.Date);
+            e.HasOne(x => x.Enrollment).WithMany().OnDelete(DeleteBehavior.Restrict);
         });
         b.Entity<PrivateFile>(e =>
         {

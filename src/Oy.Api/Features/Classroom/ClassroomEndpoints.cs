@@ -26,6 +26,7 @@ public record ClassroomSessionDto(
     Guid Id, Guid ProgramId, string ProgramTitle, ProgramType ProgramType, string Location, DateOnly Date,
     TimeOnly StartTime, TimeOnly EndTime, bool IsCancelled, string Note,
     DateTime? StartedAt, string StartedByName, DateTime? EndedAt, bool CanStart,
+    string Summary, string SummaryByName, DateTime? SummaryUpdatedAt,
     List<ClassroomStaff> Staff, List<ClassroomChild> Children, List<ClassroomNote> Notes, IReadOnlyList<string> NoteTags);
 
 /// <summary>null clears the mark (back to "not marked").</summary>
@@ -34,6 +35,12 @@ public record AttendanceInput(AttendanceStatus? Status);
 public record NoteInput(Guid EnrollmentId, [Required, MaxLength(2000)] string Text, List<string>? Tags);
 
 public record NoteUpdate([Required, MaxLength(2000)] string Text, List<string>? Tags);
+
+/// <summary>The lesson's general summary written by the staff.</summary>
+public record SummaryInput(string? Summary);
+
+/// <summary>Completing may carry the summary so it can be written and the lesson completed in one step.</summary>
+public record FinishInput(string? Summary);
 
 /// <summary>
 /// Lesson day ("ders"): start it, take attendance, and write quick notes about the children in the live pool
@@ -94,13 +101,38 @@ public static class ClassroomEndpoints
             return await ChangedAsync(id, viewer, db, media, notify);
         });
 
-        group.MapPost("/sessions/{id:guid}/finish", async (Guid id, ClaimsPrincipal me, AppDbContext db, MediaService media, ClassroomNotifier notify) =>
+        // Completing requires the general summary; it may be sent along so both happen in one step.
+        group.MapPost("/sessions/{id:guid}/finish", async (Guid id, FinishInput? input, ClaimsPrincipal me, AppDbContext db, MediaService media, ClassroomNotifier notify) =>
         {
             var viewer = await ViewerAsync(me, db);
             var s = await Visible(db, viewer).FirstOrDefaultAsync(x => x.Id == id);
             if (s is null) return Results.NotFound();
             if (s.StartedAt is null) return ApiResults.Conflict("Ders henüz başlatılmadı.");
-            s.EndedAt ??= DateTime.UtcNow;
+            if (s.EndedAt is null)
+            {
+                if (input?.Summary is not null)
+                {
+                    var (summary, errors) = ValidateSummary(input.Summary);
+                    if (errors.Any) return errors.ToResult();
+                    SetSummary(s, summary, viewer);
+                }
+                if (s.Summary.Length == 0)
+                    return new Errors().Check(false, "summary", "Oturumu tamamlamak için genel özet yazılmalı.").ToResult();
+                s.EndedAt = DateTime.UtcNow;
+                await db.SaveChangesAsync();
+            }
+            return await ChangedAsync(id, viewer, db, media, notify);
+        });
+
+        group.MapPut("/sessions/{id:guid}/summary", async (Guid id, SummaryInput input, ClaimsPrincipal me, AppDbContext db, MediaService media, ClassroomNotifier notify) =>
+        {
+            var viewer = await ViewerAsync(me, db);
+            var s = await Visible(db, viewer).FirstOrDefaultAsync(x => x.Id == id);
+            if (s is null) return Results.NotFound();
+            if (Closed(s) is { } closed) return closed;
+            var (summary, errors) = ValidateSummary(input.Summary, required: false);
+            if (errors.Any) return errors.ToResult();
+            SetSummary(s, summary, viewer);
             await db.SaveChangesAsync();
             return await ChangedAsync(id, viewer, db, media, notify);
         });
@@ -284,6 +316,25 @@ public static class ClassroomEndpoints
         return (t, tagList, errors);
     }
 
+    public const int SummaryMaxLength = 4000;
+
+    public static (string Summary, Errors Errors) ValidateSummary(string? summary, bool required = true)
+    {
+        var t = summary?.Trim() ?? "";
+        var errors = new Errors()
+            .Check(!required || t.Length > 0, "summary", "Oturumu tamamlamak için genel özet yazılmalı.")
+            .Check(t.Length <= SummaryMaxLength, "summary", $"Özet en fazla {SummaryMaxLength} karakter olabilir.");
+        return (t, errors);
+    }
+
+    private static void SetSummary(Session s, string summary, Viewer viewer)
+    {
+        if (s.Summary == summary) return;
+        s.Summary = summary;
+        s.SummaryByName = summary.Length == 0 ? "" : viewer.Name;
+        s.SummaryUpdatedAt = summary.Length == 0 ? null : DateTime.UtcNow;
+    }
+
     private static async Task<(ObservationNote? Note, IResult? Error)> EditableNoteAsync(Guid noteId, Viewer viewer, AppDbContext db)
     {
         var note = await db.ObservationNotes.FirstOrDefaultAsync(n => n.Id == noteId);
@@ -319,6 +370,7 @@ public static class ClassroomEndpoints
             s.Id, s.ProgramId, s.Program.Title, s.Program.Type, s.Program.Location, s.Date, s.StartTime, s.EndTime,
             s.IsCancelled, s.Note, s.StartedAt, s.StartedByName, s.EndedAt,
             CanStart: !s.IsCancelled && s.Date <= Today(),
+            s.Summary, s.SummaryByName, s.SummaryUpdatedAt,
             staff.Select(x => x with { PhotoUrl = media.ToPublic(x.PhotoUrl) }).ToList(),
             children.Select(c =>
             {
@@ -343,5 +395,8 @@ public static class ClassroomEndpoints
     public static DateOnly Today() => DateOnly.FromDateTime(LocalNow());
 
     /// <summary>Wall-clock time in Turkey.</summary>
-    public static DateTime LocalNow() => TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, Turkey);
+    public static DateTime LocalNow() => ToLocal(DateTime.UtcNow);
+
+    /// <summary>A UTC instant as wall-clock time in Turkey.</summary>
+    public static DateTime ToLocal(DateTime utc) => TimeZoneInfo.ConvertTimeFromUtc(DateTime.SpecifyKind(utc, DateTimeKind.Utc), Turkey);
 }

@@ -18,6 +18,10 @@ public enum NotificationKind
     RegistrationSubmitted,
     ContactMessage,
     PaymentDigest,
+
+    // Added later (kept at the end: stored as numbers)
+    CommitmentRequested,
+    CommitmentSigned,
 }
 
 /// <summary>
@@ -51,12 +55,14 @@ public class NotificationMute
 public static class NotificationKinds
 {
     public static readonly IReadOnlyList<NotificationKind> Guardian =
-        [NotificationKind.FeedPost, NotificationKind.Photos, NotificationKind.PaymentDue, NotificationKind.PaymentOverdue, NotificationKind.InvoiceIssued];
+        [NotificationKind.FeedPost, NotificationKind.Photos, NotificationKind.PaymentDue, NotificationKind.PaymentOverdue, NotificationKind.InvoiceIssued,
+         NotificationKind.CommitmentRequested];
 
     public static readonly IReadOnlyList<NotificationKind> Staff =
     [
         NotificationKind.TodoAssigned, NotificationKind.TodoComment, NotificationKind.TodoDue, NotificationKind.PreRegistration,
         NotificationKind.RegistrationSubmitted, NotificationKind.ContactMessage, NotificationKind.PaymentDigest,
+        NotificationKind.CommitmentSigned,
     ];
 
     public static string Label(NotificationKind kind) => kind switch
@@ -73,6 +79,8 @@ public static class NotificationKinds
         NotificationKind.RegistrationSubmitted => "Doldurulan esas kayıt formları",
         NotificationKind.ContactMessage => "İletişim formu mesajları",
         NotificationKind.PaymentDigest => "Sabah ödeme özeti",
+        NotificationKind.CommitmentRequested => "İmzanızı bekleyen taahhütnameler",
+        NotificationKind.CommitmentSigned => "İmzalanan taahhütnameler",
         _ => kind.ToString(),
     };
 }

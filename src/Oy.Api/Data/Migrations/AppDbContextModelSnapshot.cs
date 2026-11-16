@@ -176,6 +176,118 @@ namespace Oy.Api.Data.Migrations
                     b.ToTable("ClassPhotoTags");
                 });
 
+            modelBuilder.Entity("Oy.Api.Domain.CommitmentSignature", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("BodyHash")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("Channel")
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("EnrollmentId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("IpAddress")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<DateTime?>("OpenedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<byte[]>("SignatureImage")
+                        .HasColumnType("bytea");
+
+                    b.Property<DateTime?>("SignedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("SignedBody")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<Guid?>("SignedByUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("SignedTitle")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<string>("SignerName")
+                        .IsRequired()
+                        .HasMaxLength(120)
+                        .HasColumnType("character varying(120)");
+
+                    b.Property<Guid>("TemplateId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Token")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("UserAgent")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<string>("WitnessName")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TemplateId");
+
+                    b.HasIndex("Token")
+                        .IsUnique();
+
+                    b.HasIndex("EnrollmentId", "TemplateId")
+                        .IsUnique();
+
+                    b.ToTable("CommitmentSignatures");
+                });
+
+            modelBuilder.Entity("Oy.Api.Domain.CommitmentTemplate", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Body")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Title")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("CommitmentTemplates");
+                });
+
             modelBuilder.Entity("Oy.Api.Domain.ContactMessage", b =>
                 {
                     b.Property<Guid>("Id")
@@ -432,6 +544,56 @@ namespace Oy.Api.Data.Migrations
                         .IsUnique();
 
                     b.ToTable("GuardianLinks");
+                });
+
+            modelBuilder.Entity("Oy.Api.Domain.GuardianMeeting", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("AuthorName")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<Guid?>("AuthorUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Channel")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateOnly>("Date")
+                        .HasColumnType("date");
+
+                    b.Property<Guid>("EnrollmentId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Text")
+                        .IsRequired()
+                        .HasMaxLength(4000)
+                        .HasColumnType("character varying(4000)");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("With")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Date");
+
+                    b.HasIndex("EnrollmentId", "Date");
+
+                    b.ToTable("GuardianMeetings");
                 });
 
             modelBuilder.Entity("Oy.Api.Domain.IntegrationConfig", b =>
@@ -946,6 +1108,24 @@ namespace Oy.Api.Data.Migrations
                     b.ToTable("PrivateFiles");
                 });
 
+            modelBuilder.Entity("Oy.Api.Domain.ProgramCommitment", b =>
+                {
+                    b.Property<Guid>("ProgramId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("TemplateId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("Position")
+                        .HasColumnType("integer");
+
+                    b.HasKey("ProgramId", "TemplateId");
+
+                    b.HasIndex("TemplateId");
+
+                    b.ToTable("ProgramCommitments");
+                });
+
             modelBuilder.Entity("Oy.Api.Domain.RegistrationRequest", b =>
                 {
                     b.Property<Guid>("Id")
@@ -1076,6 +1256,17 @@ namespace Oy.Api.Data.Migrations
                     b.Property<string>("StartedByName")
                         .IsRequired()
                         .HasColumnType("text");
+
+                    b.Property<string>("Summary")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("SummaryByName")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<DateTime?>("SummaryUpdatedAt")
+                        .HasColumnType("timestamp with time zone");
 
                     b.Property<Guid?>("ThemeId")
                         .HasColumnType("uuid");
@@ -1765,6 +1956,25 @@ namespace Oy.Api.Data.Migrations
                     b.Navigation("Photo");
                 });
 
+            modelBuilder.Entity("Oy.Api.Domain.CommitmentSignature", b =>
+                {
+                    b.HasOne("Oy.Api.Domain.Enrollment", "Enrollment")
+                        .WithMany()
+                        .HasForeignKey("EnrollmentId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Oy.Api.Domain.CommitmentTemplate", "Template")
+                        .WithMany()
+                        .HasForeignKey("TemplateId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Enrollment");
+
+                    b.Navigation("Template");
+                });
+
             modelBuilder.Entity("Oy.Api.Domain.DueAdjustment", b =>
                 {
                     b.HasOne("Oy.Api.Domain.Enrollment", "Enrollment")
@@ -1825,6 +2035,17 @@ namespace Oy.Api.Data.Migrations
                     b.Navigation("Enrollment");
 
                     b.Navigation("User");
+                });
+
+            modelBuilder.Entity("Oy.Api.Domain.GuardianMeeting", b =>
+                {
+                    b.HasOne("Oy.Api.Domain.Enrollment", "Enrollment")
+                        .WithMany()
+                        .HasForeignKey("EnrollmentId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Enrollment");
                 });
 
             modelBuilder.Entity("Oy.Api.Domain.Invoice", b =>
@@ -1915,6 +2136,25 @@ namespace Oy.Api.Data.Migrations
                         .IsRequired();
 
                     b.Navigation("Enrollment");
+                });
+
+            modelBuilder.Entity("Oy.Api.Domain.ProgramCommitment", b =>
+                {
+                    b.HasOne("Oy.Api.Domain.TrainingProgram", "Program")
+                        .WithMany()
+                        .HasForeignKey("ProgramId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("Oy.Api.Domain.CommitmentTemplate", "Template")
+                        .WithMany("Programs")
+                        .HasForeignKey("TemplateId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Program");
+
+                    b.Navigation("Template");
                 });
 
             modelBuilder.Entity("Oy.Api.Domain.RegistrationRequest", b =>
@@ -2057,6 +2297,11 @@ namespace Oy.Api.Data.Migrations
             modelBuilder.Entity("Oy.Api.Domain.ClassPhoto", b =>
                 {
                     b.Navigation("Tags");
+                });
+
+            modelBuilder.Entity("Oy.Api.Domain.CommitmentTemplate", b =>
+                {
+                    b.Navigation("Programs");
                 });
 
             modelBuilder.Entity("Oy.Api.Domain.Enrollment", b =>
