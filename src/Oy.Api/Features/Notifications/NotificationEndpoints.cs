@@ -70,7 +70,7 @@ public static class NotificationEndpoints
         group.MapPut("/settings", async (NotificationSettingInput input, ClaimsPrincipal me, AppDbContext db, CancellationToken ct) =>
         {
             var userId = me.UserId()!.Value;
-            if (!KindsFor(me).Contains(input.Kind)) return Results.BadRequest();
+            if (!KindsFor(me).Contains(input.Kind)) return new Errors().Check(false, "kind", "Bu bildirim türü için yetkiniz yok.").ToResult();
             var existing = await db.NotificationMutes.FirstOrDefaultAsync(m => m.UserId == userId && m.Kind == input.Kind, ct);
             if (input.Enabled && existing is not null) db.NotificationMutes.Remove(existing);
             else if (!input.Enabled && existing is null) db.NotificationMutes.Add(new NotificationMute { UserId = userId, Kind = input.Kind });
