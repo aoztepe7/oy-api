@@ -59,12 +59,14 @@ builder.Services.AddProblemDetails(o => o.CustomizeProblemDetails = ctx =>
     // Validation keys follow the JSON contract (camelCase), e.g. "Title" → "title".
     if (ctx.ProblemDetails is HttpValidationProblemDetails v)
     {
-        var errors = v.Errors.ToDictionary(e => System.Text.Json.JsonNamingPolicy.CamelCase.ConvertName(e.Key), e => e.Value);
+        var errors = v.Errors.ToDictionary(e => System.Text.Json.JsonNamingPolicy.CamelCase.ConvertName(e.Key), e => e.Value.Select(ValidationMessages.Translate).ToArray());
         v.Errors.Clear();
         foreach (var (key, value) in errors) v.Errors[key] = value;
         v.Title = "Girilen bilgiler geçersiz.";
     }
 });
+builder.Services.Configure<Microsoft.AspNetCore.Routing.RouteHandlerOptions>(o => o.ThrowOnBadRequest = true);
+builder.Services.AddExceptionHandler<BadRequestExceptionHandler>();
 builder.Services.AddOpenApi();
 builder.Services.AddHealthChecks().AddDbContextCheck<AppDbContext>();
 
