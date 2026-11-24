@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Oy.Api.Data;
 using Oy.Api.Domain;
+using Oy.Api.Infrastructure;
 using Oy.Api.Infrastructure.Integrations;
 
 namespace Oy.Api.Features.Settings;
@@ -23,10 +24,19 @@ public static class IntegrationEndpoints
         group.MapGet("/", async (AppDbContext db, IntegrationService integrations) =>
             (await db.Integrations.AsNoTracking().OrderBy(i => i.Type).ToListAsync()).Select(i => ToDto(i, integrations)));
 
-        group.MapPut("/{type}", async (IntegrationType type, IntegrationInput input, AppDbContext db, IntegrationService integrations) =>
+        group.MapPut("/{type}", async (IntegrationType type, IntegrationInput input, AppDbContext db, IntegrationService integrations, UiRevalidator ui) =>
         {
             var def = IntegrationCatalog.Find(type, input.Provider ?? "");
             if (def is null) return new Errors().Check(false, "provider", "Geçersiz sağlayıcı.").ToResult();
+
+            var settings = def.SettingFields.ToDictionary(
+                f => f.Key,
+                f => input.Settings?.TryGetValue(f.Key, out var v) == true ? v?.Trim() ?? "" : "");
+            if (type == IntegrationType.Tracking)
+            {
+                var errors = MetaPixel.Validate(input.IsActive, settings);
+                if (errors.Any) return errors.ToResult();
+            }
 
             var config = await db.Integrations.FirstOrDefaultAsync(i => i.Type == type);
             if (config is null)
@@ -46,12 +56,11 @@ public static class IntegrationEndpoints
 
             config.Provider = def.Provider;
             config.IsActive = input.IsActive;
-            config.IsTestMode = input.IsTestMode;
-            config.Settings = def.SettingFields.ToDictionary(
-                f => f.Key,
-                f => input.Settings?.TryGetValue(f.Key, out var v) == true ? v?.Trim() ?? "" : "");
+            config.IsTestMode = input.IsTestMode && type != IntegrationType.Tracking; // the pixel has no test mode
+            config.Settings = settings;
             config.EncryptedSecrets = integrations.Protect(secrets.Where(s => def.SecretFields.Any(f => f.Key == s.Key)).ToDictionary());
             await db.SaveChangesAsync();
+            if (type == IntegrationType.Tracking) await ui.RevalidateAsync(CacheTags.Site);
             return Results.Ok(ToDto(config, integrations));
         });
     }

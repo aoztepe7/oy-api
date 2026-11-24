@@ -39,6 +39,8 @@ public sealed class Errors
 
     public bool Any => _errors.Count > 0;
 
+    public IReadOnlyCollection<string> Fields => _errors.Keys;
+
     public IResult ToResult() => Results.ValidationProblem(
         _errors.ToDictionary(e => e.Key, e => e.Value.ToArray()), title: "Girilen bilgiler geçersiz.");
 }

@@ -7,6 +7,7 @@ using Oy.Api.Features.Content;
 using Oy.Api.Features.Programs;
 using Oy.Api.Infrastructure;
 using Oy.Api.Infrastructure.Auth;
+using Oy.Api.Infrastructure.Integrations;
 using Oy.Api.Infrastructure.Push;
 
 namespace Oy.Api.Features.Public;
@@ -18,6 +19,8 @@ public record PublicProgram(
     bool EnrollmentEnabled,
     /// <summary>Pre-registration form definition (detail only).</summary>
     EnrollmentFormConfig? EnrollmentForm);
+
+public record PublicTracking(string MetaPixelId, string MetaDomainVerification);
 
 public record PublicStaff(Guid Id, string FullName, string Title, string Bio, string PhotoUrl);
 
@@ -55,6 +58,18 @@ public static class PublicEndpoints
         var group = app.MapGroup("/api/public").WithTags("Public").AllowAnonymous();
 
         group.MapPublicPages();
+
+        group.MapGet("/tracking", async (IntegrationService integrations) =>
+        {
+            var t = await integrations.GetActiveAsync(IntegrationType.Tracking);
+            var pixel = t?.Provider == MetaPixel.Provider ? t : null;
+            var id = pixel?.Setting(MetaPixel.PixelIdKey) ?? "";
+            var code = pixel?.Setting(MetaPixel.DomainVerificationKey) ?? "";
+            // Re-validated on the way out: the values are written into a script on the site.
+            return new PublicTracking(
+                MetaPixel.IsValidPixelId(id) ? id : "",
+                MetaPixel.IsValidDomainVerification(code) ? code : "");
+        });
 
         group.MapGet("/programs", async (ProgramType? type, int? age, AppDbContext db, MediaService media) =>
         {
