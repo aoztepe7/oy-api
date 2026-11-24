@@ -45,6 +45,11 @@ public static class IntegrationCatalog
             [.. TaxpayerFields, new("serviceUrl", "Servis URL")], IntegratorSecrets),
         new(IntegrationType.EInvoice, "Logo", "Logo eLogo",
             [.. TaxpayerFields, new("serviceUrl", "Servis URL")], IntegratorSecrets),
+
+        new(IntegrationType.Tracking, MetaPixel.Provider, "Meta Pixel (Facebook / Instagram)",
+            [new(MetaPixel.PixelIdKey, "Pixel ID (Veri kümesi kimliği)"),
+             new(MetaPixel.DomainVerificationKey, "Alan adı doğrulama kodu (isteğe bağlı)")],
+            []),
     ];
 
     public static IntegrationProviderDefinition? Find(IntegrationType type, string provider) =>

@@ -21,4 +21,4 @@ public enum ThemeKind { Weekly, Monthly, SpecialDay }
 
 public enum SpecialDayKind { PublicHoliday, ReligiousHoliday, Observance }
 
-public enum IntegrationType { Payment, EInvoice }
+public enum IntegrationType { Payment, EInvoice, Tracking }
