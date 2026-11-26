@@ -12,6 +12,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<TrainingProgram> Programs => Set<TrainingProgram>();
     public DbSet<Session> Sessions => Set<Session>();
     public DbSet<Expense> Expenses => Set<Expense>();
+    public DbSet<GeneralExpense> GeneralExpenses => Set<GeneralExpense>();
     public DbSet<Staff> Staff => Set<Staff>();
     public DbSet<StaffAssignment> Assignments => Set<StaffAssignment>();
     public DbSet<Enrollment> Enrollments => Set<Enrollment>();
@@ -102,6 +103,13 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             e.HasOne(x => x.MakeupFor).WithMany().HasForeignKey(x => x.MakeupForSessionId).OnDelete(DeleteBehavior.SetNull);
         });
         b.Entity<Expense>().HasIndex(x => new { x.ProgramId, x.Date });
+        b.Entity<GeneralExpense>(e =>
+        {
+            e.Property(x => x.Category).HasMaxLength(100);
+            e.Property(x => x.Description).HasMaxLength(500);
+            e.Property(x => x.AuthorName).HasMaxLength(200);
+            e.HasIndex(x => x.Date);
+        });
         b.Entity<StaffAssignment>().HasOne(x => x.Staff).WithMany(x => x.Assignments).OnDelete(DeleteBehavior.Restrict);
         b.Entity<Enrollment>(e =>
         {

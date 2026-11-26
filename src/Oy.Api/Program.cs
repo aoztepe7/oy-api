@@ -194,6 +194,7 @@ app.MapMediaLibrary();
 app.MapGuardian();
 app.MapFeed();
 app.MapFinance();
+app.MapGeneralExpenses();
 app.MapBilling();
 app.MapTodos();
 app.MapMeetings();
