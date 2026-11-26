@@ -210,6 +210,8 @@ public static class DashboardEndpoints
                     cost += p.Assignments.Sum(a => FinanceCalculator.AssignmentCost(a, a.Staff, held, monthStart).Total);
                     cost += p.Expenses.Sum(e => e.Amount);
                 }
+                // Overhead (genel gider) belongs to no program but counts in the business cost.
+                cost += await db.GeneralExpenses.Where(e => e.Date >= monthStart && e.Date <= monthEnd).SumAsync(e => e.Amount);
             }
 
             return new

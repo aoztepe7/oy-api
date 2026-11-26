@@ -19,6 +19,9 @@ public record ProgramFinanceDto(Guid ProgramId, string Title, IReadOnlyList<Prog
 
 public record FinanceSummaryRow(Guid ProgramId, string Title, ProgramType Type, decimal Revenue, decimal StaffCost, decimal Expenses, decimal Profit, decimal Margin);
 
+/// <summary>Per-program rows plus overhead (genel gider) that belongs to no program; both feed the grand totals.</summary>
+public record FinanceSummaryDto(IReadOnlyList<FinanceSummaryRow> Programs, decimal GeneralExpenses);
+
 public record PaymentInput(Guid EnrollmentId, [Range(0.01, 10_000_000)] decimal Amount, PaymentMethod Method, DateTime? PaidAt, [MaxLength(500)] string? Note,
     /// <summary>Instalment paid (1st of the month); null = applied to the oldest unpaid instalments.</summary>
     DateOnly? Period = null);
@@ -79,11 +82,13 @@ public static class FinanceEndpoints
         group.MapGet("/finance/summary", async (AppDbContext db) =>
         {
             var programs = await LoadForFinance(db).OrderByDescending(p => p.StartDate).ToListAsync();
-            return programs.Select(p =>
+            var rows = programs.Select(p =>
             {
                 var t = Totals(FinanceCalculator.ProgramFinance(p));
                 return new FinanceSummaryRow(p.Id, p.Title, p.Type, t.Revenue, t.StaffCost, t.Expenses, t.Profit, t.Margin);
-            });
+            }).ToList();
+            var general = await db.GeneralExpenses.AsNoTracking().SumAsync(e => e.Amount);
+            return new FinanceSummaryDto(rows, general);
         }).RequireAuthorization(read);
 
         // Payments
